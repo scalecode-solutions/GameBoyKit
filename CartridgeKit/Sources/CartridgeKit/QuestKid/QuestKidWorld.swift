@@ -145,8 +145,9 @@ enum QuestKidWorld {
         serpentsCoil,
         hollowHalls,
         echoCaverns,
-        lostLibrary
-        // Future: boneyard, yewGrove
+        lostLibrary,
+        boneyard
+        // Future: yewGrove
     ]
 
     /// "The Meadow" — the original 4-room overworld + dungeon arc
@@ -348,6 +349,69 @@ enum QuestKidWorld {
         keyLocation: (roomID: 4, col: 7, row: 4),    // key sits in middle bar
         bigHeartLocation: nil                         // no vault yet
     )
+
+    // MARK: - Boneyard dungeon
+    //
+    // Letter shape (5 rows × 3 cols of rooms). B has two right-curving
+    // bumps, which need bridges back to the spine to stay connected:
+    //
+    //   X X X     row 0   top of top bump
+    //   X . X     row 1
+    //   X X .     row 2   middle indent (asymmetric — only left two)
+    //   X . X     row 3
+    //   X X X     row 4   bottom bar
+    //
+    // Room IDs (reading row-major, skipping empty cells):
+    //    0  1  2
+    //    3     4
+    //    5  6
+    //    7     8
+    //    9 10 11
+    //
+    // Player starts at room 0 (top-left). Boss in room 11 (bottom-right).
+    // Rooms 4, 6, 8 are dead-end stubs that complete the B silhouette
+    // without affecting the main path — picking them off gives the
+    // player slight risk/reward detours.
+    static let boneyard = Dungeon(
+        id: "boneyard",
+        name: "BONEYARD",
+        letter: "B",
+        theme: .boneyard,
+        rooms: boneyardRooms,
+        startRoomID: 0,
+        bossRoomID: 11,
+        mapDotX: 96, mapDotY: 92,    // lower-left curve of the heart
+        keyLocation: nil,
+        bigHeartLocation: nil
+    )
+
+    private static let boneyardRooms: [Room] = [
+        // Row 0 — top of top bump
+        stoneRoom(id: 0,  neighbors: [.right: 1, .down: 3]),                                       // top-left (start)
+        stoneRoom(id: 1,  neighbors: [.left: 0, .right: 2],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        stoneRoom(id: 2,  neighbors: [.left: 1, .down: 4]),                                       // top-right
+        // Row 1
+        stoneRoom(id: 3,  neighbors: [.up: 0, .down: 5],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        stoneRoom(id: 4,  neighbors: [.up: 2],
+                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),                        // top-bump-right dead-end
+        // Row 2 — middle indent
+        stoneRoom(id: 5,  neighbors: [.up: 3, .right: 6, .down: 7]),
+        stoneRoom(id: 6,  neighbors: [.left: 5],
+                  enemies: [EnemySpawn(kind: .octorock, col: 8, row: 4)]),                        // mid-mid dead-end
+        // Row 3
+        stoneRoom(id: 7,  neighbors: [.up: 5, .down: 9],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        stoneRoom(id: 8,  neighbors: [.down: 11],
+                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),                        // bottom-bump right
+        // Row 4 — bottom bar
+        stoneRoom(id: 9,  neighbors: [.up: 7, .right: 10]),                                       // bottom-left
+        stoneRoom(id: 10, neighbors: [.left: 9, .right: 11],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        stoneRoom(id: 11, neighbors: [.left: 10, .up: 8],
+                  enemies: [EnemySpawn(kind: .boss, col: 7, row: 3)])                             // bottom-right boss room
+    ]
 
     // MARK: - Lost Library dungeon
     //
