@@ -111,17 +111,30 @@ struct Projectile: Sendable, Identifiable {
     }
 }
 
+enum HeartKind: Sendable, Hashable {
+    /// Drops from enemies — restores ½ heart, despawns after a few seconds.
+    case small
+    /// Persistent (no TTL) reward heart — fully refills HP. Used for the
+    /// hidden vault pickup.
+    case big
+}
+
 struct HeartPickup: Sendable, Identifiable {
     let id: UUID
     var x: Double
     var y: Double
     var ttl: Double = 9.0
     var bobPhase: Double = 0
+    var kind: HeartKind = .small
 
-    static let size: Double = 10
+    /// Big hearts (vault rewards) don't decay or flicker; small hearts do.
+    var isPersistent: Bool { kind == .big }
+
+    /// Visual footprint differs between small and big.
+    var size: Double { kind == .big ? 14 : 10 }
 
     var hitbox: BoundingBox {
-        BoundingBox(x: x, y: y, w: HeartPickup.size, h: HeartPickup.size)
+        BoundingBox(x: x, y: y, w: size, h: size)
     }
 }
 
@@ -228,6 +241,8 @@ final class QuestKidState {
     static let keyRoomID: Int = 4
     /// Room ID where the boss is fought.
     static let bossRoomID: Int = 5
+    /// Room ID of the secret vault that holds the big heart.
+    static let vaultRoomID: Int = 6
 
     // MARK: - Persistence
 
@@ -264,7 +279,15 @@ final class QuestKidState {
         }
         self.enemiesPerRoom = enemies
         self.projectilesPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        self.heartsPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        // Hearts: a persistent big heart sits in the centre of the vault.
+        var hearts: [[HeartPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        hearts[Self.vaultRoomID] = [HeartPickup(
+            id: UUID(),
+            x: Double(7 * QuestKidLayout.tileSize) + 1,
+            y: Double(3 * QuestKidLayout.tileSize) + 1,
+            kind: .big
+        )]
+        self.heartsPerRoom = hearts
         // Place a key pickup in the antechamber, on the floor between
         // the two pillars (col 7, row 4 ≈ middle of the room).
         var keys: [[KeyPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
@@ -729,15 +752,28 @@ final class QuestKidState {
     private func tickHeartPickups(dt: Double) {
         var hearts = currentHearts
         for i in hearts.indices.reversed() {
-            hearts[i].ttl -= dt
             hearts[i].bobPhase += dt
-            if hearts[i].ttl <= 0 {
-                hearts.remove(at: i)
-                continue
+            // Small drops decay; big rewards don't.
+            if !hearts[i].isPersistent {
+                hearts[i].ttl -= dt
+                if hearts[i].ttl <= 0 {
+                    hearts.remove(at: i)
+                    continue
+                }
             }
-            if hearts[i].hitbox.intersects(player.hitbox) && player.hp < player.maxHP {
-                player.hp = min(player.maxHP, player.hp + 1)
-                hearts.remove(at: i)
+            if hearts[i].hitbox.intersects(player.hitbox) {
+                switch hearts[i].kind {
+                case .small:
+                    // Don't waste a small drop at full HP.
+                    if player.hp < player.maxHP {
+                        player.hp = min(player.maxHP, player.hp + 1)
+                        hearts.remove(at: i)
+                    }
+                case .big:
+                    // Always collect — full refill, persistent reward.
+                    player.hp = player.maxHP
+                    hearts.remove(at: i)
+                }
             }
         }
         currentHearts = hearts
@@ -884,6 +920,18 @@ final class QuestKidState {
                 progress: 0,
                 dir: dir
             )
+            return
+        }
+        // Secret passage — works like a regular door but is visually
+        // disguised as a wall (the visual cue is just a subtle crack).
+        if case .secretPassage(let dir) = tile,
+           let neighborID = currentRoom.neighbors[dir] {
+            phase = .roomTransition(
+                from: currentRoomIndex,
+                to: neighborID,
+                progress: 0,
+                dir: dir
+            )
         }
     }
 
@@ -921,7 +969,14 @@ final class QuestKidState {
         }
         enemiesPerRoom = enemies
         projectilesPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        heartsPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        var hearts: [[HeartPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        hearts[Self.vaultRoomID] = [HeartPickup(
+            id: UUID(),
+            x: Double(7 * QuestKidLayout.tileSize) + 1,
+            y: Double(3 * QuestKidLayout.tileSize) + 1,
+            kind: .big
+        )]
+        heartsPerRoom = hearts
         var keys: [[KeyPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
         keys[Self.keyRoomID] = [KeyPickup(
             id: UUID(),

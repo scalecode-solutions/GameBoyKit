@@ -314,6 +314,22 @@ public struct QuestKidGame: View {
             ctx.fillPixel(x: x + 5, y: y + 8, width: 6, height: 5, color: palette.lcdShade0, scale: scale)
             // Keyhole
             ctx.fillPixel(x: x + 7, y: y + 10, width: 2, height: 2, color: palette.lcdShade3, scale: scale)
+
+        case .secretPassage:
+            // Looks almost identical to wallDark, but with a faint
+            // diagonal crack — the only visual hint that this tile is
+            // walkable. Players have to lean in to spot it.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 1, width: t - 2, height: t - 2, color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: x, y: y + 7, width: t, height: 1, color: palette.lcdShade3, scale: scale)
+            // Diagonal hairline crack — 5 pixels at slight angle
+            ctx.fillPixel(x: x + 3,  y: y + 4,  width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 4,  y: y + 5,  width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 5,  y: y + 6,  width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 6,  y: y + 8,  width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 7,  y: y + 9,  width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 8,  y: y + 11, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 9,  y: y + 12, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
         }
     }
 
@@ -644,37 +660,71 @@ public struct QuestKidGame: View {
         hearts: [HeartPickup],
         pixelOffsetX: Int, pixelOffsetY: Int
     ) {
-        // Tiny bob animation: y +/- 1 px on a sine cycle.
         let outline = palette.lcdShade3
         let fill = palette.lcdShade2
         let highlight = palette.lcdShade0
         for h in hearts {
-            // Despawn flicker on the last 2 seconds.
-            if h.ttl < 2 {
+            // Small hearts flicker out in their last 2 seconds.
+            if !h.isPersistent, h.ttl < 2 {
                 let phase = Int(h.ttl * 8) % 2
                 if phase == 0 { continue }
             }
             let bob = Int(round(sin(h.bobPhase * 4) * 1))
             let x = pixelOffsetX + Int(h.x)
             let y = pixelOffsetY + Int(h.y) + bob
-            // 8×7 heart shape
-            let bits: [[Int]] = [
-                [0,1,1,0,0,1,1,0],
-                [1,2,2,1,1,2,2,1],
-                [1,2,2,2,2,2,2,1],
-                [1,2,2,2,2,2,2,1],
-                [0,1,2,2,2,2,1,0],
-                [0,0,1,2,2,1,0,0],
-                [0,0,0,1,1,0,0,0],
-            ]
-            for (row, line) in bits.enumerated() {
-                for (col, v) in line.enumerated() where v != 0 {
-                    let c: Color = v == 1 ? outline : fill
-                    ctx.fillPixel(x: x + col, y: y + row, color: c, scale: scale)
+
+            switch h.kind {
+            case .small:
+                // 8×7 heart shape — drops from enemies
+                let bits: [[Int]] = [
+                    [0,1,1,0,0,1,1,0],
+                    [1,2,2,1,1,2,2,1],
+                    [1,2,2,2,2,2,2,1],
+                    [1,2,2,2,2,2,2,1],
+                    [0,1,2,2,2,2,1,0],
+                    [0,0,1,2,2,1,0,0],
+                    [0,0,0,1,1,0,0,0],
+                ]
+                for (row, line) in bits.enumerated() {
+                    for (col, v) in line.enumerated() where v != 0 {
+                        let c: Color = v == 1 ? outline : fill
+                        ctx.fillPixel(x: x + col, y: y + row, color: c, scale: scale)
+                    }
                 }
+                ctx.fillPixel(x: x + 2, y: y + 2, color: highlight, scale: scale)
+
+            case .big:
+                // 12×11 chunky reward heart with a constant pulsing
+                // shimmer so it reads as a power-up, not a drop.
+                let bits: [[Int]] = [
+                    [0,1,1,1,0,0,0,1,1,1,0,0],
+                    [1,2,2,2,1,0,1,2,2,2,1,0],
+                    [1,2,3,2,2,1,2,2,3,2,1,0],
+                    [1,2,2,2,2,2,2,2,2,2,1,0],
+                    [1,2,2,2,2,2,2,2,2,2,1,0],
+                    [0,1,2,2,2,2,2,2,2,1,0,0],
+                    [0,0,1,2,2,2,2,2,1,0,0,0],
+                    [0,0,0,1,2,2,2,1,0,0,0,0],
+                    [0,0,0,0,1,2,1,0,0,0,0,0],
+                    [0,0,0,0,0,1,0,0,0,0,0,0],
+                ]
+                for (row, line) in bits.enumerated() {
+                    for (col, v) in line.enumerated() where v != 0 {
+                        let c: Color
+                        switch v {
+                        case 1: c = outline
+                        case 2: c = fill
+                        default: c = highlight
+                        }
+                        ctx.fillPixel(x: x + col, y: y + row, color: c, scale: scale)
+                    }
+                }
+                // Twinkle that orbits the heart
+                let twinkleAngle = h.bobPhase * 2
+                let tx = Int(cos(twinkleAngle) * 5) + 6
+                let ty = Int(sin(twinkleAngle) * 4) + 4
+                ctx.fillPixel(x: x + tx, y: y + ty, color: highlight, scale: scale)
             }
-            // Sparkle highlight
-            ctx.fillPixel(x: x + 2, y: y + 2, color: highlight, scale: scale)
         }
     }
 

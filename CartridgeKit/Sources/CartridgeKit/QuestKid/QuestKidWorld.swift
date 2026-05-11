@@ -29,12 +29,13 @@ enum TileKind: Sendable, Hashable {
     case tree           // wall
     case water          // wall (can't cross)
     case wallDark       // dungeon wall — different visual from overworld rock
-    case door(Direction)        // walkable; triggers room transition
-    case lockedDoor(Direction)  // blocks until player has a key
+    case door(Direction)             // walkable; triggers room transition
+    case lockedDoor(Direction)       // blocks until player has a key
+    case secretPassage(Direction)    // looks like a wall, walkable, transitions like a door
 
     var isSolid: Bool {
         switch self {
-        case .grass, .sand, .stone, .door: return false
+        case .grass, .sand, .stone, .door, .secretPassage: return false
         case .rock, .tree, .water, .wallDark: return true
         case .lockedDoor: return true   // gated check happens in state with hasKey
         }
@@ -103,7 +104,8 @@ enum QuestKidWorld {
         room2_clearing,
         room3_sands,
         room4_antechamber,
-        room5_boss
+        room5_boss,
+        room6_vault
     ]
 
     /// Starting room. Exits: right → 1, down → 2.
@@ -184,19 +186,21 @@ enum QuestKidWorld {
     /// Dungeon Antechamber — guards on stone floor with two pillars
     /// (rocks) and a key entity (placed by state, not tiles) in the
     /// middle. Locked door at the bottom leads to the boss room.
+    /// `S` on the left wall is a *secret passage* — looks like wallDark
+    /// with a subtle crack, but is walkable and transitions to the vault.
     static let room4_antechamber = Room(
         id: 4,
         tiles: build(
             "WWWWWWWDWWWWWWWW",
             "WbbbbbbbbbbbbbbW",
-            "WbbbbbbbbbbbbbbW",
+            "SbbbbbbbbbbbbbbW",
             "WbbbbbbbbbbbbbbW",
             "WbbbbbbbbbbbbbbW",
             "WbKbbbbbbbbbbKbW",
             "WbbbbbbbbbbbbbbW",
             "WWWWWWWLWWWWWWWW"
         ),
-        neighbors: [.up: 3, .down: 5],
+        neighbors: [.up: 3, .down: 5, .left: 6],
         enemySpawns: [
             EnemySpawn(kind: .charger, col: 3, row: 5),
             EnemySpawn(kind: .charger, col: 12, row: 5)
@@ -223,6 +227,26 @@ enum QuestKidWorld {
         enemySpawns: [EnemySpawn(kind: .boss, col: 7, row: 2)]
     )
 
+    /// Secret Vault — accessed via a hidden passage on the left wall
+    /// of the antechamber. Contains a persistent big-heart pickup
+    /// (full HP restore). The exit `D` on the right wall returns the
+    /// player to the antechamber.
+    static let room6_vault = Room(
+        id: 6,
+        tiles: build(
+            "WWWWWWWWWWWWWWWW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbD",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WWWWWWWWWWWWWWWW"
+        ),
+        neighbors: [.right: 4],
+        enemySpawns: []
+    )
+
     // MARK: - Tile builder
 
     /// Build a tile row from a string of characters. "D" is auto-classified
@@ -238,16 +262,20 @@ enum QuestKidWorld {
             precondition(chars.count == QuestKidLayout.roomCols,
                          "Room row \(rowIdx) must be \(QuestKidLayout.roomCols) cols; got \(chars.count) — '\(row)'")
             for (colIdx, ch) in chars.enumerated() {
-                // "D" and "L" both auto-classify by edge position
-                // (regular door vs. locked door).
-                if ch == "D" || ch == "L" {
+                // "D", "L", "S" all auto-classify by edge position:
+                //   D → .door  L → .lockedDoor  S → .secretPassage
+                if ch == "D" || ch == "L" || ch == "S" {
                     let dir: Direction
                     if rowIdx == 0 { dir = .up }
                     else if rowIdx == QuestKidLayout.roomRows - 1 { dir = .down }
                     else if colIdx == 0 { dir = .left }
                     else if colIdx == QuestKidLayout.roomCols - 1 { dir = .right }
                     else { dir = .down }
-                    out.append(ch == "L" ? .lockedDoor(dir) : .door(dir))
+                    switch ch {
+                    case "L": out.append(.lockedDoor(dir))
+                    case "S": out.append(.secretPassage(dir))
+                    default:  out.append(.door(dir))
+                    }
                     continue
                 }
                 switch ch {
