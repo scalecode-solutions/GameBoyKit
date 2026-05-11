@@ -83,15 +83,16 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
             ShellBackground(palette: palette)
             content(palette: palette)
                 .padding(.horizontal, 22)
-                .padding(.top, 28)
+                .padding(.top, 18)
                 .padding(.bottom, 24)
         }
-        // Cartridges / shelf views inside the screen slot read this.
+        // Cartridges / shelf views inside the screen slot read these.
         .environment(\.gameBoyPalette, palette)
+        .environment(\.gameBoyPowerOn, powerOn)
         // Real DMG is ~0.61 (90 × 148mm) but we run a hair taller to give
-        // the action / system button rows breathing room — the tilted
-        // START pill otherwise crowds the B button.
-        .aspectRatio(0.58, contentMode: .fit)
+        // the action / system button rows breathing room and the top
+        // power-slider row a clean home above the screen.
+        .aspectRatio(0.56, contentMode: .fit)
         .frame(maxWidth: 480)                         // looks right on phone & iPad
     }
 
@@ -99,6 +100,15 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
 
     private func content(palette: GameBoyPalette) -> some View {
         VStack(spacing: 0) {
+            // Top row: DMG-style power slider on the left, balanced
+            // empty space on the right. Lives on the chassis itself
+            // so the device is fully self-contained.
+            HStack(alignment: .center) {
+                PowerSwitch(isOn: $powerOn, palette: palette)
+                Spacer(minLength: 0)
+            }
+            .padding(.bottom, 6)
+
             // Screen unit (bezel + LCD + power LED + subtitle line)
             ScreenView(
                 palette: palette,

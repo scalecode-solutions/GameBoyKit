@@ -29,6 +29,7 @@ public struct CartridgeShelf: View {
     @State private var phase: Phase = .boot
     @State private var selectedIndex: Int = 0
     @Environment(\.gameBoyPalette) private var palette
+    @Environment(\.gameBoyPowerOn) private var powerOn
 
     public init(input: GameBoyInput, cartridges: [GameBoyCartridge]) {
         self.input = input
@@ -45,7 +46,8 @@ public struct CartridgeShelf: View {
             case .playing(let cart):
                 cart.make(input)
                     .onChange(of: input.startPressed) { _, pressed in
-                        if pressed { phase = .menu }
+                        guard powerOn, pressed else { return }
+                        phase = .menu
                     }
             }
         }
@@ -155,7 +157,7 @@ public struct CartridgeShelf: View {
             }
         }
         .onChange(of: input.dpad) { _, newValue in
-            guard !cartridges.isEmpty else { return }
+            guard powerOn, !cartridges.isEmpty else { return }
             if newValue?.isUp == true {
                 selectedIndex = (selectedIndex - 1 + cartridges.count) % cartridges.count
             } else if newValue?.isDown == true {
@@ -163,7 +165,7 @@ public struct CartridgeShelf: View {
             }
         }
         .onChange(of: input.aPressed) { _, pressed in
-            guard pressed, cartridges.indices.contains(selectedIndex) else { return }
+            guard powerOn, pressed, cartridges.indices.contains(selectedIndex) else { return }
             phase = .playing(cartridges[selectedIndex])
         }
     }

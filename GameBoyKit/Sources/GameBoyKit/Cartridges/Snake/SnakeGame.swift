@@ -14,6 +14,7 @@ public struct SnakeGame: View {
     @State private var state: SnakeState
     @State private var resetCounter: Int = 0   // bumps when we want to restart the task
     @Environment(\.gameBoyPalette) private var palette
+    @Environment(\.gameBoyPowerOn) private var powerOn
 
     public init(input: GameBoyInput) {
         self.input = input
@@ -24,9 +25,18 @@ public struct SnakeGame: View {
         PixelCanvas { ctx, scale in
             render(into: &ctx, scale: scale)
         }
-        .onChange(of: input.dpad) { _, dir in handleDirection(dir) }
-        .onChange(of: input.aPressed) { _, pressed in if pressed { handleA() } }
-        .task(id: resetCounter) {
+        .onChange(of: input.dpad) { _, dir in
+            guard powerOn else { return }
+            handleDirection(dir)
+        }
+        .onChange(of: input.aPressed) { _, pressed in
+            guard powerOn, pressed else { return }
+            handleA()
+        }
+        // Including powerOn in the id cancels the loop when off and
+        // restarts it (with a fresh sleep) when on.
+        .task(id: "\(resetCounter)-\(powerOn)") {
+            guard powerOn else { return }
             await runTickLoop()
         }
     }

@@ -13,12 +13,6 @@ struct ContentView: View {
             VStack(spacing: 14) {
                 Spacer()
 
-                Toggle("Power", isOn: $isPoweredOn)
-                    .toggleStyle(.switch)
-                    .tint(.green)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 60)
-
                 GameBoyView(
                     screen: { input in
                         CartridgeShelf(
