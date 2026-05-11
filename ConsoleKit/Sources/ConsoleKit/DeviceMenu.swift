@@ -80,42 +80,39 @@ internal struct DeviceMenu: View {
     @ViewBuilder
     private var mainList: some View {
         PixelCanvas { ctx, scale in
-            // Dim layer under the menu
+            // Full-LCD opaque background so nothing underneath bleeds
+            // through (was previously a translucent panel with strips
+            // of cartridge-shelf content visible at the top and bottom).
             ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
-                          color: palette.lcdShade3.opacity(0.65), scale: scale)
-            // Menu panel
-            ctx.fillPixel(x: 16, y: 12, width: 224, height: 120,
                           color: palette.lcdShade0, scale: scale)
-            ctx.fillPixel(x: 16, y: 12,  width: 224, height: 1, color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: 16, y: 131, width: 224, height: 1, color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: 16, y: 12, width: 1, height: 120, color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: 239, y: 12, width: 1, height: 120, color: palette.lcdShade3, scale: scale)
 
-            // Title bar
-            ctx.fillPixel(x: 16, y: 12, width: 224, height: 16,
+            // Title bar — full width, full top of LCD.
+            ctx.fillPixel(x: 0, y: 0, width: 256, height: 14,
                           color: palette.lcdShade3, scale: scale)
             ctx.draw(
                 Text("DEVICE")
-                    .font(.system(size: 11 * scale.height,
+                    .font(.system(size: 10 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade0),
-                at: CGPoint(x: 128 * scale.width, y: 20 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 7 * scale.height),
                 anchor: .center
             )
 
-            // Items (filtered to hide context-only entries)
+            // Items — tighter row spacing so all 6 fit cleanly above the hint.
             let items = visibleItems
+            let rowHeight = 13
+            let listStartY = 22
             for (i, item) in items.enumerated() {
-                let yTop = 36 + i * 16
+                let yTop = listStartY + i * rowHeight
                 let isSelected = i == selectedIndex
                 if isSelected {
-                    ctx.fillPixel(x: 22, y: yTop - 2, width: 212, height: 16,
+                    ctx.fillPixel(x: 6, y: yTop - 1, width: 244, height: rowHeight - 1,
                                   color: palette.lcdShade2, scale: scale)
                     // ▶ pointer
-                    ctx.fillPixel(x: 26, y: yTop + 2, width: 2, height: 6,
+                    ctx.fillPixel(x: 10, y: yTop + 2, width: 2, height: 5,
                                   color: palette.lcdShade0, scale: scale)
-                    ctx.fillPixel(x: 28, y: yTop + 4, width: 1, height: 2,
+                    ctx.fillPixel(x: 12, y: yTop + 3, width: 1, height: 3,
                                   color: palette.lcdShade0, scale: scale)
                 }
                 // Left: item title
@@ -125,7 +122,7 @@ internal struct DeviceMenu: View {
                                       weight: .heavy,
                                       design: .monospaced))
                         .foregroundColor(isSelected ? palette.lcdShade0 : palette.lcdShade3),
-                    at: CGPoint(x: 34 * scale.width, y: CGFloat(yTop + 5) * scale.height),
+                    at: CGPoint(x: 20 * scale.width, y: CGFloat(yTop + 5) * scale.height),
                     anchor: .leading
                 )
                 // Right: current value
@@ -136,20 +133,22 @@ internal struct DeviceMenu: View {
                                           weight: .heavy,
                                           design: .monospaced))
                             .foregroundColor(isSelected ? palette.lcdShade0 : palette.lcdShade2),
-                        at: CGPoint(x: 228 * scale.width, y: CGFloat(yTop + 5) * scale.height),
+                        at: CGPoint(x: 244 * scale.width, y: CGFloat(yTop + 5) * scale.height),
                         anchor: .trailing
                     )
                 }
             }
 
-            // Controls hint
+            // Bottom hint strip
+            ctx.fillPixel(x: 0, y: 130, width: 256, height: 14,
+                          color: palette.lcdShade3, scale: scale)
             ctx.draw(
                 Text("◁▷ EDIT   A: ENTER   B/MENU: CLOSE")
                     .font(.system(size: 7 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
-                    .foregroundColor(palette.lcdShade2),
-                at: CGPoint(x: 128 * scale.width, y: 125 * scale.height),
+                    .foregroundColor(palette.lcdShade0),
+                at: CGPoint(x: 128 * scale.width, y: 137 * scale.height),
                 anchor: .center
             )
         }
