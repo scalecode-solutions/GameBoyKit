@@ -10,11 +10,28 @@ internal struct DeviceMenu: View {
     let input: GameBoyInput
     let palette: GameBoyPalette
     let onClose: () -> Void
+    /// Optional — when provided, an extra "RETURN TO LIBRARY" item is
+    /// shown at the bottom of the menu. CartridgeShelf supplies this
+    /// only when a cartridge is currently playing, so the option is
+    /// hidden on the shelf itself (where it would be a no-op).
+    let onReturnToLibrary: (() -> Void)?
 
     @Environment(\.deviceSettings) private var settings
 
     @State private var selectedIndex: Int = 0
     @State private var subScreen: SubScreen? = nil
+
+    init(
+        input: GameBoyInput,
+        palette: GameBoyPalette,
+        onClose: @escaping () -> Void,
+        onReturnToLibrary: (() -> Void)? = nil
+    ) {
+        self.input = input
+        self.palette = palette
+        self.onClose = onClose
+        self.onReturnToLibrary = onReturnToLibrary
+    }
 
     enum SubScreen: Equatable {
         case about
@@ -22,16 +39,25 @@ internal struct DeviceMenu: View {
     }
 
     private enum Item: Int, CaseIterable {
-        case color, theme, haptics, about, inputTest
+        case color, theme, haptics, about, inputTest, returnToLibrary
 
         var title: String {
             switch self {
-            case .color:     return "COLOR"
-            case .theme:     return "THEME"
-            case .haptics:   return "HAPTICS"
-            case .about:     return "ABOUT"
-            case .inputTest: return "INPUT TEST"
+            case .color:           return "COLOR"
+            case .theme:           return "THEME"
+            case .haptics:         return "HAPTICS"
+            case .about:           return "ABOUT"
+            case .inputTest:       return "INPUT TEST"
+            case .returnToLibrary: return "EXIT TO LIBRARY"
             }
+        }
+    }
+
+    /// The actual items shown right now — hides RETURN TO LIBRARY when
+    /// no onReturnToLibrary handler is wired up.
+    private var visibleItems: [Item] {
+        Item.allCases.filter { item in
+            item == .returnToLibrary ? onReturnToLibrary != nil : true
         }
     }
 
@@ -78,9 +104,10 @@ internal struct DeviceMenu: View {
                 anchor: .center
             )
 
-            // Items
-            for (i, item) in Item.allCases.enumerated() {
-                let yTop = 36 + i * 18
+            // Items (filtered to hide context-only entries)
+            let items = visibleItems
+            for (i, item) in items.enumerated() {
+                let yTop = 36 + i * 16
                 let isSelected = i == selectedIndex
                 if isSelected {
                     ctx.fillPixel(x: 22, y: yTop - 2, width: 212, height: 16,
@@ -128,8 +155,9 @@ internal struct DeviceMenu: View {
         }
         .onChange(of: input.dpad) { _, dir in
             guard let dir else { return }
-            if dir.isUp   { selectedIndex = (selectedIndex - 1 + Item.allCases.count) % Item.allCases.count }
-            if dir.isDown { selectedIndex = (selectedIndex + 1) % Item.allCases.count }
+            let count = visibleItems.count
+            if dir.isUp   { selectedIndex = (selectedIndex - 1 + count) % count }
+            if dir.isDown { selectedIndex = (selectedIndex + 1) % count }
             if dir.isLeft  { adjustSelection(by: -1) }
             if dir.isRight { adjustSelection(by: +1) }
         }
@@ -145,11 +173,12 @@ internal struct DeviceMenu: View {
 
     private func valueLabel(for item: Item) -> String? {
         switch item {
-        case .color:     return settings.paletteSet.displayName
-        case .theme:     return themeDisplayName(settings.theme)
-        case .haptics:   return settings.hapticsEnabled ? "ON" : "OFF"
+        case .color:           return settings.paletteSet.displayName
+        case .theme:           return themeDisplayName(settings.theme)
+        case .haptics:         return settings.hapticsEnabled ? "ON" : "OFF"
         case .about,
-             .inputTest: return "─►"
+             .inputTest,
+             .returnToLibrary: return "─►"
         }
     }
 
@@ -163,7 +192,9 @@ internal struct DeviceMenu: View {
 
     /// Inline ◁▷ adjustment for toggle/picker items.
     private func adjustSelection(by delta: Int) {
-        guard let item = Item(rawValue: selectedIndex) else { return }
+        let items = visibleItems
+        guard items.indices.contains(selectedIndex) else { return }
+        let item = items[selectedIndex]
         switch item {
         case .color:
             let builtIns = GameBoyPaletteSet.builtIns
@@ -178,7 +209,7 @@ internal struct DeviceMenu: View {
             settings.theme = order[next]
         case .haptics:
             settings.hapticsEnabled.toggle()
-        case .about, .inputTest:
+        case .about, .inputTest, .returnToLibrary:
             break
         }
     }
@@ -186,13 +217,18 @@ internal struct DeviceMenu: View {
     /// A-button behavior — toggles for boolean items, opens sub-screen
     /// for navigable items.
     private func activateSelection() {
-        guard let item = Item(rawValue: selectedIndex) else { return }
+        let items = visibleItems
+        guard items.indices.contains(selectedIndex) else { return }
+        let item = items[selectedIndex]
         switch item {
-        case .color:     adjustSelection(by: +1)        // A also cycles color
-        case .theme:     adjustSelection(by: +1)        // A also cycles theme
-        case .haptics:   settings.hapticsEnabled.toggle()
-        case .about:     subScreen = .about
-        case .inputTest: subScreen = .inputTest
+        case .color:           adjustSelection(by: +1)
+        case .theme:           adjustSelection(by: +1)
+        case .haptics:         settings.hapticsEnabled.toggle()
+        case .about:           subScreen = .about
+        case .inputTest:       subScreen = .inputTest
+        case .returnToLibrary:
+            onReturnToLibrary?()
+            onClose()
         }
     }
 }

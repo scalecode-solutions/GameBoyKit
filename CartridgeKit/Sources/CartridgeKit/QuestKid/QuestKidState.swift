@@ -179,6 +179,7 @@ final class QuestKidState {
         case title
         case dungeonSelect          // heart-shaped menu of dungeons
         case playing
+        case paused                 // in-dungeon START pause overlay
         case roomTransition(from: Int, to: Int, progress: Double, dir: Direction)
         case gameOver
         case won
@@ -378,9 +379,20 @@ final class QuestKidState {
         phase = .playing
     }
 
-    /// Return from gameOver/won back to the dungeon-select screen.
+    /// Return from gameOver/won/paused back to the dungeon-select screen.
     func returnToDungeonSelect() {
         phase = .dungeonSelect
+    }
+
+    /// Open the START pause overlay. No-op if not currently in
+    /// playing/transition.
+    func openPauseMenu() {
+        if phase == .playing { phase = .paused }
+    }
+
+    /// Close the pause overlay and resume play.
+    func closePauseMenu() {
+        if phase == .paused { phase = .playing }
     }
 
     /// Go back from dungeon-select to the title screen.
@@ -453,7 +465,7 @@ final class QuestKidState {
 
     func tick(dt: Double, dpad: Direction?, swingPressed: Bool) {
         switch phase {
-        case .title, .dungeonSelect, .gameOver, .won:
+        case .title, .dungeonSelect, .paused, .gameOver, .won:
             return
         case .roomTransition(let from, let to, let progress, let dir):
             let newProgress = progress + dt / Self.roomTransitionDuration

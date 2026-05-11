@@ -17,6 +17,7 @@ public struct QuestKidGame: View {
     @State private var state: QuestKidState
     @State private var resetCounter: Int = 0
     @State private var swingPending: Bool = false   // edge-trigger A-button
+    @State private var pauseSelectedIndex: Int = 0  // 0 = resume, 1 = back to dungeons
     @Environment(\.gameBoyPalette) private var palette
     @Environment(\.gameBoyPowerOn) private var powerOn
 
@@ -46,18 +47,32 @@ public struct QuestKidGame: View {
             case .gameOver, .won:
                 state.reset()
                 resetCounter &+= 1
+            case .paused:
+                // 0 = resume, 1 = back to dungeons
+                if pauseSelectedIndex == 0 {
+                    state.closePauseMenu()
+                } else {
+                    state.returnToDungeonSelect()
+                }
             default:
                 swingPending = true
             }
         }
-        // D-pad navigates the dungeon-select dots when on that screen.
+        // D-pad navigates non-gameplay menus.
         .onChange(of: input.dpad) { _, newValue in
-            guard powerOn, state.phase == .dungeonSelect,
-                  let newDir = newValue else { return }
-            state.moveDungeonSelectCursor(newDir)
+            guard powerOn, let newDir = newValue else { return }
+            switch state.phase {
+            case .dungeonSelect:
+                state.moveDungeonSelectCursor(newDir)
+            case .paused:
+                if newDir.isUp   { pauseSelectedIndex = max(0, pauseSelectedIndex - 1) }
+                if newDir.isDown { pauseSelectedIndex = min(1, pauseSelectedIndex + 1) }
+            default:
+                break
+            }
         }
         // B button on win/gameOver returns to dungeon-select; on
-        // dungeon-select, returns to title.
+        // dungeon-select, returns to title; on pause overlay, closes it.
         .onChange(of: input.bPressed) { _, pressed in
             guard powerOn, pressed else { return }
             switch state.phase {
@@ -65,6 +80,21 @@ public struct QuestKidGame: View {
                 state.returnToDungeonSelect()
             case .dungeonSelect:
                 state.returnToTitle()
+            case .paused:
+                state.closePauseMenu()
+            default:
+                break
+            }
+        }
+        // START button — toggles the pause overlay during play.
+        .onChange(of: input.startPressed) { _, pressed in
+            guard powerOn, pressed else { return }
+            switch state.phase {
+            case .playing:
+                state.openPauseMenu()
+                pauseSelectedIndex = 0
+            case .paused:
+                state.closePauseMenu()
             default:
                 break
             }
@@ -150,6 +180,8 @@ public struct QuestKidGame: View {
             renderGameOver(into: &ctx, scale: scale)
         } else if state.phase == .won {
             renderWin(into: &ctx, scale: scale)
+        } else if state.phase == .paused {
+            renderPauseOverlay(into: &ctx, scale: scale)
         }
 
         // HUD key indicator if player has the key.
@@ -1153,6 +1185,67 @@ public struct QuestKidGame: View {
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade2),
             at: CGPoint(x: 128 * scale.width, y: 84 * scale.height),
+            anchor: .center
+        )
+    }
+
+    // MARK: - Pause overlay
+
+    private func renderPauseOverlay(into ctx: inout GraphicsContext, scale: CGSize) {
+        // Dim the playfield.
+        ctx.fillPixel(x: 0, y: QuestKidLayout.hudHeight,
+                      width: 256, height: 128,
+                      color: palette.lcdShade3.opacity(0.55), scale: scale)
+        // Panel
+        let boxX = 48, boxY = 42, boxW = 160, boxH = 60
+        ctx.fillPixel(x: boxX, y: boxY, width: boxW, height: boxH,
+                      color: palette.lcdShade0, scale: scale)
+        ctx.fillPixel(x: boxX, y: boxY, width: boxW, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: boxX, y: boxY + boxH - 1, width: boxW, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        // Title
+        ctx.draw(
+            Text("PAUSED")
+                .font(.system(size: 13 * scale.height,
+                              weight: .black,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: 128 * scale.width, y: 55 * scale.height),
+            anchor: .center
+        )
+        // Two items: RESUME (0) and BACK TO DUNGEONS (1).
+        let items = ["RESUME", "BACK TO DUNGEONS"]
+        for (i, label) in items.enumerated() {
+            let yTop = 68 + i * 13
+            let isSelected = i == pauseSelectedIndex
+            if isSelected {
+                ctx.fillPixel(x: 56, y: yTop - 1, width: 144, height: 11,
+                              color: palette.lcdShade2, scale: scale)
+                // ▶ pointer
+                ctx.fillPixel(x: 60, y: yTop + 2, width: 2, height: 4,
+                              color: palette.lcdShade0, scale: scale)
+                ctx.fillPixel(x: 62, y: yTop + 3, width: 1, height: 2,
+                              color: palette.lcdShade0, scale: scale)
+            }
+            ctx.draw(
+                Text(label)
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(isSelected ? palette.lcdShade0 : palette.lcdShade3),
+                at: CGPoint(x: 128 * scale.width, y: CGFloat(yTop + 5) * scale.height),
+                anchor: .center
+            )
+        }
+        // Footer hint
+        ctx.draw(
+            Text("A: SELECT   B/START: RESUME")
+                .font(.system(size: 7 * scale.height,
+                              weight: .heavy,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade2),
+            at: CGPoint(x: 128 * scale.width, y: 110 * scale.height),
             anchor: .center
         )
     }
