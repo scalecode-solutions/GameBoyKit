@@ -144,8 +144,9 @@ enum QuestKidWorld {
         tutorialDungeon,
         serpentsCoil,
         hollowHalls,
-        echoCaverns
-        // Future: lostLibrary, boneyard, yewGrove
+        echoCaverns,
+        lostLibrary
+        // Future: boneyard, yewGrove
     ]
 
     /// "The Meadow" — the original 4-room overworld + dungeon arc
@@ -348,6 +349,68 @@ enum QuestKidWorld {
         bigHeartLocation: nil                         // no vault yet
     )
 
+    // MARK: - Lost Library dungeon
+    //
+    // Letter shape (5 rows × 3 cols of rooms):
+    //
+    //   X . .     row 0   spine top
+    //   X . S     row 1   spine + SECRET in the empty space
+    //   X . .     row 2   spine
+    //   X . .     row 3   spine
+    //   X X X     row 4   bottom bar
+    //
+    // Room IDs (reading row-major, skipping empty cells; secret room
+    // is appended last):
+    //   0
+    //   1
+    //   2
+    //   3
+    //   4 5 6
+    //   7 = secret (lives at (row 1, col 2))
+    //
+    // Player starts at room 0 (spine top). Boss in room 6 (bottom-right).
+    // The secret room (7) sits in the empty upper-right area of the L
+    // and holds a big-heart reward. Accessed via a .secretPassage
+    // tile on the right wall of room 1 — invisible unless you bump it.
+    static let lostLibrary = Dungeon(
+        id: "lostlibrary",
+        name: "LOST LIBRARY",
+        letter: "L",
+        theme: .library,
+        rooms: lostLibraryRooms,
+        startRoomID: 0,
+        bossRoomID: 6,
+        mapDotX: 228, mapDotY: 64,    // right side of the heart (mirrors E)
+        keyLocation: nil,
+        bigHeartLocation: (roomID: 7, col: 7, row: 3)   // big heart in secret room
+    )
+
+    private static let lostLibraryRooms: [Room] = [
+        // Row 0
+        stoneRoom(id: 0, neighbors: [.down: 1]),                                                   // spine top (start)
+        // Row 1 — spine room with secret passage to the hidden vault
+        stoneRoom(id: 1, neighbors: [.up: 0, .down: 2],
+                  secretNeighbors: [.right: 7],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        // Row 2
+        stoneRoom(id: 2, neighbors: [.up: 1, .down: 3],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        // Row 3
+        stoneRoom(id: 3, neighbors: [.up: 2, .down: 4],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        // Row 4 — bottom bar
+        stoneRoom(id: 4, neighbors: [.up: 3, .right: 5]),                                          // bottom-left corner
+        stoneRoom(id: 5, neighbors: [.left: 4, .right: 6],
+                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),
+        stoneRoom(id: 6, neighbors: [.left: 5],
+                  enemies: [EnemySpawn(kind: .boss, col: 7, row: 3)]),                             // bottom-right boss room
+        // Secret room — empty room with a big-heart pickup (placed by
+        // the Dungeon's bigHeartLocation). Connected back to room 1
+        // via its own secret passage on the left.
+        stoneRoom(id: 7, neighbors: [:],
+                  secretNeighbors: [.left: 1])
+    ]
+
     // MARK: - Echo Caverns dungeon
     //
     // Letter shape (5 rows × 3 cols of rooms):
@@ -488,17 +551,20 @@ enum QuestKidWorld {
     ]
 
     /// Build a simple stone-floor dungeon room with auto-placed doors
-    /// on the requested sides.  Used by the procedural letter dungeons
+    /// on the requested sides. Used by the procedural letter dungeons
     /// so we don't hand-design 50+ tile arrays.
     ///
-    /// `openSides` is derived from `neighbors.keys` — if a direction has
-    /// a neighbor, that side gets a door; otherwise it's a solid wall.
+    /// `neighbors` are normal doors. `secretNeighbors` are hidden
+    /// passages rendered as wallDark with a faint crack — both kinds
+    /// route through `Room.neighbors` for the room-transition system.
     private static func stoneRoom(
         id: Int,
         neighbors: [Direction: Int],
+        secretNeighbors: [Direction: Int] = [:],
         enemies: [EnemySpawn] = []
     ) -> Room {
         let openSides: Set<Direction> = Set(neighbors.keys)
+        let secretSides: Set<Direction> = Set(secretNeighbors.keys)
         let cols = QuestKidLayout.roomCols
         let rows = QuestKidLayout.roomRows
         var tiles: [TileKind] = []
@@ -510,25 +576,42 @@ enum QuestKidWorld {
                     tiles.append(.stone)
                     continue
                 }
-                // Edge tile — either a wall or a door if this side is open.
-                let dir: Direction?
-                if r == 0 && c == cols / 2 - 1 && openSides.contains(.up)    { dir = .up }
-                else if r == rows - 1 && c == cols / 2 - 1 && openSides.contains(.down) { dir = .down }
-                else if c == 0 && r == rows / 2 && openSides.contains(.left)            { dir = .left }
-                else if c == cols - 1 && r == rows / 2 && openSides.contains(.right)    { dir = .right }
-                else { dir = nil }
+                // Figure out which side and column this edge tile is on.
+                let normalDir: Direction?
+                let secretDir: Direction?
+                if r == 0 && c == cols / 2 - 1 {
+                    normalDir = openSides.contains(.up) ? .up : nil
+                    secretDir = secretSides.contains(.up) ? .up : nil
+                } else if r == rows - 1 && c == cols / 2 - 1 {
+                    normalDir = openSides.contains(.down) ? .down : nil
+                    secretDir = secretSides.contains(.down) ? .down : nil
+                } else if c == 0 && r == rows / 2 {
+                    normalDir = openSides.contains(.left) ? .left : nil
+                    secretDir = secretSides.contains(.left) ? .left : nil
+                } else if c == cols - 1 && r == rows / 2 {
+                    normalDir = openSides.contains(.right) ? .right : nil
+                    secretDir = secretSides.contains(.right) ? .right : nil
+                } else {
+                    normalDir = nil
+                    secretDir = nil
+                }
 
-                if let dir {
+                if let dir = normalDir {
                     tiles.append(.door(dir))
+                } else if let dir = secretDir {
+                    tiles.append(.secretPassage(dir))
                 } else {
                     tiles.append(.wallDark)
                 }
             }
         }
+        // Merge both neighbor maps so the state machine can route either.
+        var merged = neighbors
+        for (k, v) in secretNeighbors { merged[k] = v }
         return Room(
             id: id,
             tiles: tiles,
-            neighbors: neighbors,
+            neighbors: merged,
             enemySpawns: enemies
         )
     }
