@@ -37,10 +37,13 @@ public struct QuestKidGame: View {
         }
         .onChange(of: input.aPressed) { _, pressed in
             guard powerOn, pressed else { return }
-            if state.phase == .gameOver || state.phase == .won {
+            switch state.phase {
+            case .title:
+                state.start()
+            case .gameOver, .won:
                 state.reset()
                 resetCounter &+= 1
-            } else {
+            default:
                 swingPending = true
             }
         }
@@ -76,6 +79,12 @@ public struct QuestKidGame: View {
         // Background
         ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                       color: palette.lcdShade0, scale: scale)
+
+        // Title screen short-circuits the rest of the render.
+        if state.phase == .title {
+            renderTitle(into: &ctx, scale: scale)
+            return
+        }
 
         // HUD (top 16 px)
         renderHUD(into: &ctx, scale: scale)
@@ -379,19 +388,73 @@ public struct QuestKidGame: View {
         let py = pixelOffsetY + Int(state.player.y)
         let blade = palette.lcdShade2
         let edge  = palette.lcdShade3
+
+        // Map remaining time → swing progress 0..<1. Higher swordTimer
+        // = earlier in the swing.
+        let remaining = state.player.swordTimer
+        let total = QuestKidState.swordDuration
+        let progress = max(0, min(1, 1.0 - remaining / total))
+        // 3-frame arc: 0-0.33 anticipation, 0.33-0.66 strike, 0.66-1 recovery
+        let frame = progress < 0.33 ? 0 : (progress < 0.66 ? 1 : 2)
+
         switch state.player.facing {
         case .up:
-            ctx.fillPixel(x: px + 7, y: py - 12, width: 2, height: 12, color: blade, scale: scale)
-            ctx.fillPixel(x: px + 7, y: py - 12, width: 2, height: 2,  color: edge,  scale: scale)
+            // Arc sweeps left → up → right across the top of the player.
+            switch frame {
+            case 0:
+                // Pulled to the left
+                ctx.fillPixel(x: px - 2, y: py + 4, width: 2, height: 8, color: blade, scale: scale)
+                ctx.fillPixel(x: px - 2, y: py + 4, width: 2, height: 2, color: edge,  scale: scale)
+            case 1:
+                // Straight up — full extent
+                ctx.fillPixel(x: px + 7, y: py - 12, width: 2, height: 12, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 7, y: py - 12, width: 2, height: 2,  color: edge,  scale: scale)
+                // Wide sweep marks
+                ctx.fillPixel(x: px + 1, y: py - 2, width: 14, height: 1, color: blade.opacity(0.7), scale: scale)
+            default:
+                // Following through to the right
+                ctx.fillPixel(x: px + 16, y: py + 4, width: 2, height: 8, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 16, y: py + 4, width: 2, height: 2, color: edge,  scale: scale)
+            }
         case .down:
-            ctx.fillPixel(x: px + 7, y: py + 16, width: 2, height: 12, color: blade, scale: scale)
-            ctx.fillPixel(x: px + 7, y: py + 26, width: 2, height: 2,  color: edge,  scale: scale)
+            switch frame {
+            case 0:
+                ctx.fillPixel(x: px + 16, y: py + 4, width: 2, height: 8, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 16, y: py + 10, width: 2, height: 2, color: edge,  scale: scale)
+            case 1:
+                ctx.fillPixel(x: px + 7, y: py + 16, width: 2, height: 12, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 7, y: py + 26, width: 2, height: 2,  color: edge,  scale: scale)
+                ctx.fillPixel(x: px + 1, y: py + 18, width: 14, height: 1, color: blade.opacity(0.7), scale: scale)
+            default:
+                ctx.fillPixel(x: px - 2, y: py + 4, width: 2, height: 8, color: blade, scale: scale)
+                ctx.fillPixel(x: px - 2, y: py + 10, width: 2, height: 2, color: edge,  scale: scale)
+            }
         case .left:
-            ctx.fillPixel(x: px - 12, y: py + 7, width: 12, height: 2, color: blade, scale: scale)
-            ctx.fillPixel(x: px - 12, y: py + 7, width: 2,  height: 2, color: edge,  scale: scale)
+            switch frame {
+            case 0:
+                ctx.fillPixel(x: px + 4, y: py - 2, width: 8, height: 2, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 4, y: py - 2, width: 2, height: 2, color: edge,  scale: scale)
+            case 1:
+                ctx.fillPixel(x: px - 12, y: py + 7, width: 12, height: 2, color: blade, scale: scale)
+                ctx.fillPixel(x: px - 12, y: py + 7, width: 2,  height: 2, color: edge,  scale: scale)
+                ctx.fillPixel(x: px - 2, y: py + 1, width: 1, height: 14, color: blade.opacity(0.7), scale: scale)
+            default:
+                ctx.fillPixel(x: px + 4, y: py + 16, width: 8, height: 2, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 4, y: py + 16, width: 2, height: 2, color: edge,  scale: scale)
+            }
         case .right:
-            ctx.fillPixel(x: px + 16, y: py + 7, width: 12, height: 2, color: blade, scale: scale)
-            ctx.fillPixel(x: px + 26, y: py + 7, width: 2,  height: 2, color: edge,  scale: scale)
+            switch frame {
+            case 0:
+                ctx.fillPixel(x: px + 4, y: py + 16, width: 8, height: 2, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 10, y: py + 16, width: 2, height: 2, color: edge,  scale: scale)
+            case 1:
+                ctx.fillPixel(x: px + 16, y: py + 7, width: 12, height: 2, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 26, y: py + 7, width: 2,  height: 2, color: edge,  scale: scale)
+                ctx.fillPixel(x: px + 18, y: py + 1, width: 1, height: 14, color: blade.opacity(0.7), scale: scale)
+            default:
+                ctx.fillPixel(x: px + 4, y: py - 2, width: 8, height: 2, color: blade, scale: scale)
+                ctx.fillPixel(x: px + 10, y: py - 2, width: 2, height: 2, color: edge,  scale: scale)
+            }
         }
     }
 
@@ -491,9 +554,20 @@ public struct QuestKidGame: View {
         x: Int, y: Int, e: Enemy
     ) {
         let enraged = e.hp <= QuestKidState.bossEnrageHPThreshold
+        let isTelegraphing = e.telegraphTimer > 0
+        // Pulsing white-on/off during wind-up. Frequency ramps up as
+        // the wind-up nears completion.
+        let telegraphPhase: Int = {
+            guard isTelegraphing else { return 0 }
+            let nearing = 1.0 - max(0, e.telegraphTimer / 0.6)   // 0..~1
+            let freq = 8.0 + nearing * 12.0
+            return Int(Date().timeIntervalSinceReferenceDate * freq) % 2
+        }()
         let bodyColor: Color = e.hitFlash > 0
             ? palette.lcdShade0
-            : palette.lcdShade3
+            : (isTelegraphing && telegraphPhase == 0
+                ? palette.lcdShade0
+                : palette.lcdShade3)
         let mid = palette.lcdShade2
         // Body (chunky 28×24)
         ctx.fillPixel(x: x + 2,  y: y + 6,  width: 28, height: 22, color: bodyColor, scale: scale)
@@ -518,14 +592,24 @@ public struct QuestKidGame: View {
         // Stubby legs
         ctx.fillPixel(x: x + 4,  y: y + 28, width: 6, height: 4, color: bodyColor, scale: scale)
         ctx.fillPixel(x: x + 22, y: y + 28, width: 6, height: 4, color: bodyColor, scale: scale)
-        // Charging cue — pulsing outline on facing edge
-        if e.isCharging {
+        // Charging cue — outline on facing edge during charge OR
+        // during the charge wind-up.
+        let showChargeEdge = e.isCharging
+            || (e.telegraphTimer > 0 && e.pendingAttack == .charge)
+        if showChargeEdge {
             switch e.facing {
             case .up:    ctx.fillPixel(x: x + 4, y: y, width: 24, height: 1, color: palette.lcdShade0, scale: scale)
             case .down:  ctx.fillPixel(x: x + 4, y: y + 31, width: 24, height: 1, color: palette.lcdShade0, scale: scale)
             case .left:  ctx.fillPixel(x: x, y: y + 4, width: 1, height: 24, color: palette.lcdShade0, scale: scale)
             case .right: ctx.fillPixel(x: x + 31, y: y + 4, width: 1, height: 24, color: palette.lcdShade0, scale: scale)
             }
+        }
+        // Fan-shot tell — 3 tiny dots arc above the boss during fan wind-up.
+        if e.telegraphTimer > 0, e.pendingAttack == .fanShot {
+            let aboveY = y - 3
+            ctx.fillPixel(x: x + 14, y: aboveY,     width: 4, height: 2, color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 6,  y: aboveY + 1, width: 2, height: 2, color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 26, y: aboveY + 1, width: 2, height: 2, color: palette.lcdShade0, scale: scale)
         }
     }
 
@@ -592,6 +676,91 @@ public struct QuestKidGame: View {
             // Sparkle highlight
             ctx.fillPixel(x: x + 2, y: y + 2, color: highlight, scale: scale)
         }
+    }
+
+    // MARK: - Title screen
+
+    private func renderTitle(into ctx: inout GraphicsContext, scale: CGSize) {
+        // Olive base
+        ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
+                      color: palette.lcdShade0, scale: scale)
+        // Top + bottom bars
+        ctx.fillPixel(x: 0, y: 0, width: 256, height: 12,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: 0, y: 132, width: 256, height: 12,
+                      color: palette.lcdShade3, scale: scale)
+
+        // Title
+        ctx.draw(
+            Text("QUESTKID")
+                .font(.system(size: 26 * scale.height,
+                              weight: .black,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: 128 * scale.width, y: 46 * scale.height),
+            anchor: .center
+        )
+        ctx.draw(
+            Text("FOUR ROOMS. ONE SWORD.")
+                .font(.system(size: 8 * scale.height,
+                              weight: .heavy,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade2),
+            at: CGPoint(x: 128 * scale.width, y: 64 * scale.height),
+            anchor: .center
+        )
+
+        // Decorative sword glyph centered below subtitle
+        renderSwordGlyph(into: &ctx, scale: scale, centerX: 128, centerY: 84)
+
+        // Saved record line
+        if state.record.cleared {
+            let halfHearts = state.record.bestHearts
+            let full = halfHearts / 2
+            let halfStr = halfHearts % 2 == 1 ? ".5" : ""
+            ctx.draw(
+                Text("✓ CLEARED  ·  BEST: \(full)\(halfStr) HEARTS")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 128 * scale.width, y: 108 * scale.height),
+                anchor: .center
+            )
+        }
+
+        // Prompt — slow blink
+        let blink = Int(Date().timeIntervalSinceReferenceDate * 1.6) % 2 == 0
+        if blink {
+            ctx.draw(
+                Text("PRESS A TO START")
+                    .font(.system(size: 10 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 128 * scale.width, y: 122 * scale.height),
+                anchor: .center
+            )
+        }
+    }
+
+    private func renderSwordGlyph(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        centerX: Int, centerY: Int
+    ) {
+        let blade = palette.lcdShade3
+        let hilt = palette.lcdShade2
+        let edge = palette.lcdShade0
+        // 5-pixel-wide blade pointing up, 20 px tall
+        ctx.fillPixel(x: centerX - 1, y: centerY - 10, width: 3, height: 14, color: blade, scale: scale)
+        // Edge highlight (left side of blade)
+        ctx.fillPixel(x: centerX - 1, y: centerY - 9, width: 1, height: 10, color: edge, scale: scale)
+        // Hilt cross-guard
+        ctx.fillPixel(x: centerX - 4, y: centerY + 4, width: 9, height: 2, color: hilt, scale: scale)
+        // Handle
+        ctx.fillPixel(x: centerX - 1, y: centerY + 6, width: 3, height: 4, color: hilt, scale: scale)
+        // Pommel
+        ctx.fillPixel(x: centerX - 1, y: centerY + 10, width: 3, height: 1, color: blade, scale: scale)
     }
 
     // MARK: - Key pickup + HUD indicator

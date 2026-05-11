@@ -49,6 +49,11 @@ struct Enemy: Sendable, Identifiable {
     var hitFlash: Double = 0    // remaining flash after sword hit
     var shotCooldown: Double = 0 // shooter only — time until next projectile
     var isCharging: Bool = false // charger only — committed to a charge?
+    /// Boss only — what attack we've committed to but haven't executed
+    /// yet. Combined with `telegraphTimer` gives the player a visible
+    /// wind-up to read and dodge.
+    var pendingAttack: BossAttack? = nil
+    var telegraphTimer: Double = 0
 
     static let size: Double = 16
 
@@ -82,6 +87,13 @@ enum EnemyKind: Sendable, Hashable {
     case shooter    // stationary, fires rocks toward player
     case charger    // line-of-sight pursuit, runs straight at player
     case boss       // dungeon boss — 32×32 sprite, fan shot + charge, 8 HP
+}
+
+/// Boss attack types — tracked separately from execution so we can
+/// render a "wind-up" telegraph before each.
+enum BossAttack: Sendable, Hashable {
+    case fanShot
+    case charge
 }
 
 struct Projectile: Sendable, Identifiable {
@@ -150,11 +162,22 @@ struct BoundingBox: Sendable {
 final class QuestKidState {
 
     enum Phase: Equatable, Sendable {
+        case title
         case playing
         case roomTransition(from: Int, to: Int, progress: Double, dir: Direction)
         case gameOver
         case won
     }
+
+    // MARK: - Saved record
+
+    /// Persistent record across cartridge launches.
+    struct SaveRecord: Sendable, Equatable {
+        var cleared: Bool = false
+        /// Best player HP (in half-hearts) on completion. 0 = not cleared.
+        var bestHearts: Int = 0
+    }
+    private(set) var record: SaveRecord
 
     // MARK: World
 
@@ -172,7 +195,7 @@ final class QuestKidState {
 
     // MARK: Phase
 
-    private(set) var phase: Phase = .playing
+    private(set) var phase: Phase = .title
 
     // MARK: Tuning
 
@@ -197,13 +220,36 @@ final class QuestKidState {
     static let bossFanCooldown: Double = 2.4    // doubled when enraged
     static let bossChargeCooldown: Double = 5.0
     static let bossEnrageHPThreshold: Int = 4    // 50% of 8
+    // Phase 4 tuning
+    static let bossFanWindUp: Double = 0.55     // wind-up before fan-shot
+    static let bossChargeWindUp: Double = 0.45  // wind-up before charge
 
     /// Room ID where the dungeon key spawns.
     static let keyRoomID: Int = 4
     /// Room ID where the boss is fought.
     static let bossRoomID: Int = 5
 
+    // MARK: - Persistence
+
+    private static let savedClearedKey = "gbk.questkid.cleared"
+    private static let savedHeartsKey  = "gbk.questkid.bestHearts"
+
+    private static func loadRecord() -> SaveRecord {
+        let defaults = UserDefaults.standard
+        return SaveRecord(
+            cleared: defaults.bool(forKey: savedClearedKey),
+            bestHearts: defaults.integer(forKey: savedHeartsKey)
+        )
+    }
+
+    private func saveRecord() {
+        let defaults = UserDefaults.standard
+        defaults.set(record.cleared, forKey: Self.savedClearedKey)
+        defaults.set(record.bestHearts, forKey: Self.savedHeartsKey)
+    }
+
     init() {
+        self.record = Self.loadRecord()
         // Hydrate per-room state from spawn templates.
         var enemies: [[Enemy]] = []
         for room in QuestKidWorld.rooms {
@@ -256,9 +302,15 @@ final class QuestKidState {
     /// Drive one frame of simulation. `dt` is elapsed seconds since the
     /// previous tick. `input` is the live D-pad direction (nil when not
     /// pressed) and a flag for the A button edge.
+    /// Start (or restart) the game from the title screen.
+    func start() {
+        guard phase == .title else { return }
+        phase = .playing
+    }
+
     func tick(dt: Double, dpad: Direction?, swingPressed: Bool) {
         switch phase {
-        case .gameOver, .won:
+        case .title, .gameOver, .won:
             return
         case .roomTransition(let from, let to, let progress, let dir):
             let newProgress = progress + dt / Self.roomTransitionDuration
@@ -341,6 +393,10 @@ final class QuestKidState {
             }
             currentHearts = hearts
             if bossDied {
+                // Persist the win + best-hearts record.
+                record.cleared = true
+                record.bestHearts = max(record.bestHearts, player.hp)
+                saveRecord()
                 phase = .won
                 return
             }
@@ -482,6 +538,32 @@ final class QuestKidState {
             enemies[i].facing = dyN >= 0 ? .down : .up
         }
 
+        // Telegraphing an attack? Don't act until wind-up completes.
+        if enemies[i].telegraphTimer > 0 {
+            enemies[i].telegraphTimer = max(0, enemies[i].telegraphTimer - dt)
+            if enemies[i].telegraphTimer > 0 {
+                return []   // still winding up
+            }
+            // Wind-up just completed — execute the queued attack.
+            guard let attack = enemies[i].pendingAttack else { return [] }
+            enemies[i].pendingAttack = nil
+            switch attack {
+            case .fanShot:
+                enemies[i].shotCooldown = Self.bossFanCooldown * mul
+                return makeFanShot(originX: ex, originY: ey,
+                                   aimX: px, aimY: py)
+            case .charge:
+                enemies[i].isCharging = true
+                if abs(dxN) > abs(dyN) {
+                    enemies[i].facing = dxN >= 0 ? .right : .left
+                } else {
+                    enemies[i].facing = dyN >= 0 ? .down : .up
+                }
+                enemies[i].aiTimer = 1.4
+                return []
+            }
+        }
+
         // Charging? Move and check for end.
         if enemies[i].isCharging {
             let prevX = enemies[i].x
@@ -503,24 +585,15 @@ final class QuestKidState {
         enemies[i].aiTimer -= dt
         enemies[i].shotCooldown -= dt
 
-        // Fan-shot when shotCooldown expires
+        // Decide what to telegraph next.
         if enemies[i].shotCooldown <= 0 {
-            enemies[i].shotCooldown = Self.bossFanCooldown * mul
-            return makeFanShot(originX: ex, originY: ey,
-                               aimX: px,    aimY: py)
+            enemies[i].pendingAttack = .fanShot
+            enemies[i].telegraphTimer = Self.bossFanWindUp
+            return []
         }
-
-        // Charge when aiTimer expires
         if enemies[i].aiTimer <= 0 {
-            enemies[i].isCharging = true
-            // Lock in the dominant axis at the moment of commitment.
-            if abs(dxN) > abs(dyN) {
-                enemies[i].facing = dxN >= 0 ? .right : .left
-            } else {
-                enemies[i].facing = dyN >= 0 ? .down : .up
-            }
-            // Charge lasts up to ~1.4s (or until wall).
-            enemies[i].aiTimer = 1.4
+            enemies[i].pendingAttack = .charge
+            enemies[i].telegraphTimer = Self.bossChargeWindUp
             return []
         }
 
@@ -860,6 +933,6 @@ final class QuestKidState {
         player = Player()
         player.x = Double((QuestKidLayout.roomCols / 2 - 1) * QuestKidLayout.tileSize)
         player.y = Double((QuestKidLayout.roomRows / 2 - 1) * QuestKidLayout.tileSize)
-        phase = .playing
+        phase = .playing    // skip the title on retry — straight to play
     }
 }
