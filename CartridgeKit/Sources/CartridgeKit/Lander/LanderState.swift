@@ -24,11 +24,32 @@ public final class LanderState {
     /// Top of the ground baseline (everything below is dirt).
     public static let groundY: Int = 132
 
-    /// Single landing pad geometry for Classic mode (fixed location v1).
-    public static let padLeft:  Int = 168
-    public static let padRight: Int = 196      // exclusive
-    public static let padTop:   Int = 116      // top of pad surface
-    public static var padWidth: Int { padRight - padLeft }
+    /// A landing pad's geometry. Pads are top-aligned (cargo / ship
+    /// rests on `top`, legs descend to `groundY`).
+    public struct Pad: Sendable, Equatable {
+        public let left:  Int
+        public let right: Int      // exclusive
+        public let top:   Int
+        public var width: Int { right - left }
+    }
+
+    /// Single landing pad used by Classic + Pendulum modes.
+    public static let classicPad = Pad(left: 168, right: 196, top: 116)
+
+    /// Three pads for Mail Run mode — left low, middle raised, right
+    /// low. Variable heights so the player has to climb between drops.
+    public static let mailRunPads: [Pad] = [
+        Pad(left: 16,  right: 44,  top: 122),    // 1: ground level, far left
+        Pad(left: 112, right: 144, top: 86),     // 2: high middle (rooftop)
+        Pad(left: 212, right: 240, top: 122)     // 3: ground level, far right
+    ]
+
+    // Back-compat shims for older references to the single Classic pad.
+    // New rendering code should iterate `pads` and use `currentTargetPad`.
+    public static var padLeft:  Int { classicPad.left }
+    public static var padRight: Int { classicPad.right }
+    public static var padTop:   Int { classicPad.top }
+    public static var padWidth: Int { classicPad.width }
 
     // MARK: - Types
 
@@ -37,12 +58,14 @@ public final class LanderState {
     public enum Mode: String, CaseIterable, Sendable, Codable {
         case classic
         case pendulum
-        // case mailRun, caveDive — coming in later iterations.
+        case mailRun
+        // case caveDive — coming in later iterations.
 
         public var displayName: String {
             switch self {
             case .classic:  return "CLASSIC"
             case .pendulum: return "PENDULUM"
+            case .mailRun:  return "MAIL RUN"
             }
         }
 
@@ -50,6 +73,7 @@ public final class LanderState {
             switch self {
             case .classic:  return "LAND ON THE PAD. SOFT TOUCH."
             case .pendulum: return "CARGO ON A TETHER. NO WHIPPING."
+            case .mailRun:  return "DELIVER TO ALL PADS. BEAT THE CLOCK."
             }
         }
     }
@@ -86,6 +110,14 @@ public final class LanderState {
     public private(set) var theta: Double = 0
     public private(set) var thetaDot: Double = 0
     public private(set) var tetherSnapped: Bool = false
+
+    // Mail Run state — sequence of pads to land at, which one is the
+    // current target, and the per-mission clock. Index advances on
+    // each successful soft landing; mission ends when all pads cleared
+    // or the clock hits zero.
+    public private(set) var mailRunIndex: Int = 0
+    public private(set) var mailRunCleared: [Bool] = []
+    public private(set) var timeRemainingTicks: Int = 0
 
     // Result data
     public private(set) var score: Int = 0
@@ -131,7 +163,7 @@ public final class LanderState {
     /// — because the cargo is what touches down.
     public var landingWouldBeSafe: Bool {
         switch mode {
-        case .classic:
+        case .classic, .mailRun:
             return abs(vy) <= landMaxVY && abs(vx) <= landMaxVX
         case .pendulum:
             return !tetherSnapped
@@ -154,6 +186,26 @@ public final class LanderState {
     public var cargoVX: Double { vx + Self.tetherLength * cos(theta) * thetaDot }
     /// Cargo VY (velocity of bob).
     public var cargoVY: Double { vy - Self.tetherLength * sin(theta) * thetaDot }
+
+    // MARK: - Pads (per-mode)
+
+    /// All pads visible during the current run. Classic + Pendulum use
+    /// a single pad; Mail Run uses three at varying heights.
+    public var pads: [Pad] {
+        switch mode {
+        case .classic, .pendulum: return [Self.classicPad]
+        case .mailRun:            return Self.mailRunPads
+        }
+    }
+
+    /// The pad the player is currently trying to land on. For single-pad
+    /// modes this is just `pads[0]`; for Mail Run it's whichever pad
+    /// the sequence is up to.
+    public var currentTargetPad: Pad {
+        let pads = self.pads
+        let idx = min(max(0, mailRunIndex), pads.count - 1)
+        return pads[idx]
+    }
 
     // MARK: - Init
 
@@ -209,6 +261,10 @@ public final class LanderState {
         theta = 0
         thetaDot = 0
         tetherSnapped = false
+        // Mail Run: reset to first pad, full clock.
+        mailRunIndex = 0
+        mailRunCleared = Array(repeating: false, count: pads.count)
+        timeRemainingTicks = (mode == .mailRun) ? 60 * 60 : 0   // 60s @ 60Hz
         phase = .playing
     }
 
@@ -301,6 +357,7 @@ public final class LanderState {
         switch mode {
         case .classic:  classicTick()
         case .pendulum: pendulumTick()
+        case .mailRun:  mailRunTick()
         }
     }
 
@@ -354,18 +411,19 @@ public final class LanderState {
     private func classicTick() {
         stepShipPhysics()
 
+        let pad = currentTargetPad
         // Ground / pad contact check — uses ship body
         let shipBottom = shipY + 6                 // ship is ~12 tall, half = 6
-        if shipBottom >= Double(Self.padTop) {
+        if shipBottom >= Double(pad.top) {
             let halfWidth: Double = 6              // ship is ~12 wide
             let shipLeft  = shipX - halfWidth
             let shipRight = shipX + halfWidth
-            let onPad = shipLeft >= Double(Self.padLeft)
-                     && shipRight <= Double(Self.padRight)
-                     && shipBottom <= Double(Self.padTop) + 2
+            let onPad = shipLeft >= Double(pad.left)
+                     && shipRight <= Double(pad.right)
+                     && shipBottom <= Double(pad.top) + 2
 
             if onPad {
-                resolveClassicLanding()
+                resolveClassicLanding(pad: pad)
                 return
             }
         }
@@ -374,12 +432,12 @@ public final class LanderState {
         }
     }
 
-    private func resolveClassicLanding() {
+    private func resolveClassicLanding(pad: Pad) {
         let softVertical   = abs(vy) <= landMaxVY
         let softHorizontal = abs(vx) <= landMaxVX
         landingImpact = abs(vy)
         if softVertical && softHorizontal {
-            shipY = Double(Self.padTop) - 6
+            shipY = Double(pad.top) - 6
             vx = 0
             vy = 0
             score = 1000 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 800))
@@ -430,15 +488,16 @@ public final class LanderState {
 
         // Cargo collision — the CARGO is what needs to touch down softly,
         // not the ship. Compute cargo position via theta.
+        let pad = currentTargetPad
         let cX = cargoX
         let cY = cargoY
         let cargoBottom = cY + Self.cargoHalfH
-        if cargoBottom >= Double(Self.padTop) {
-            let onPad = cX >= Double(Self.padLeft) + Self.cargoHalfW
-                     && cX <= Double(Self.padRight) - Self.cargoHalfW
-                     && cargoBottom <= Double(Self.padTop) + 2
+        if cargoBottom >= Double(pad.top) {
+            let onPad = cX >= Double(pad.left) + Self.cargoHalfW
+                     && cX <= Double(pad.right) - Self.cargoHalfW
+                     && cargoBottom <= Double(pad.top) + 2
             if onPad {
-                resolvePendulumLanding()
+                resolvePendulumLanding(pad: pad)
                 return
             }
         }
@@ -453,7 +512,7 @@ public final class LanderState {
         }
     }
 
-    private func resolvePendulumLanding() {
+    private func resolvePendulumLanding(pad: Pad) {
         let cvy = cargoVY
         let cvx = cargoVX
         let softVertical   = abs(cvy) <= landMaxVY
@@ -465,13 +524,116 @@ public final class LanderState {
             vy = 0
             thetaDot = 0
             // Snap the ship up so the cargo sits exactly on the pad.
-            shipY = Double(Self.padTop) - Self.tetherLength * cos(theta) - Self.cargoHalfH
+            shipY = Double(pad.top) - Self.tetherLength * cos(theta) - Self.cargoHalfH
             // Pendulum landing is harder than classic — reward it more.
             score = 1500 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 1000))
             phase = .landed
         } else {
             crash(impact: abs(cvy))
         }
+    }
+
+    // MARK: - Mail Run mode tick
+
+    /// Mail Run mode: deliver to N pads in sequence with a 60-second
+    /// clock and a single shared fuel tank. Same ship physics as
+    /// Classic — only the win condition (clear all pads) and the
+    /// lose conditions (clock expires, fuel runs out and you crash)
+    /// differ. Landing on the current target pad advances the index
+    /// and continues the mission instead of going to `.landed`.
+    private func mailRunTick() {
+        stepShipPhysics()
+
+        // Tick the clock first so a frame that runs the clock to 0
+        // and ALSO lands on the final pad still resolves as a win
+        // (the landing branch returns early; if we time out, it's
+        // because no landing happened this frame).
+        if timeRemainingTicks > 0 {
+            timeRemainingTicks -= 1
+        }
+        if timeRemainingTicks <= 0 {
+            // Out of time — partial-completion score.
+            landingImpact = 0
+            score = scoreForMailRunPartial()
+            phase = .crashed
+            return
+        }
+
+        // Try to land on the current target pad — same shape as Classic.
+        let pad = currentTargetPad
+        let shipBottom = shipY + 6
+        if shipBottom >= Double(pad.top) {
+            let halfWidth: Double = 6
+            let shipLeft  = shipX - halfWidth
+            let shipRight = shipX + halfWidth
+            let onPad = shipLeft >= Double(pad.left)
+                     && shipRight <= Double(pad.right)
+                     && shipBottom <= Double(pad.top) + 2
+            if onPad {
+                attemptMailRunDelivery(pad: pad)
+                return
+            }
+        }
+        if shipBottom >= Double(Self.groundY) {
+            // Hit the dirt — partial-completion crash.
+            landingImpact = abs(vy)
+            score = scoreForMailRunPartial()
+            phase = .crashed
+        }
+    }
+
+    /// Called when the ship touches the current target pad's surface.
+    /// A soft landing clears the pad and either advances to the next
+    /// one (continue playing) or wins the mission. A hard landing is
+    /// a crash with partial credit for any pads already cleared.
+    private func attemptMailRunDelivery(pad: Pad) {
+        let softVertical   = abs(vy) <= landMaxVY
+        let softHorizontal = abs(vx) <= landMaxVX
+        guard softVertical && softHorizontal else {
+            landingImpact = abs(vy)
+            score = scoreForMailRunPartial()
+            phase = .crashed
+            return
+        }
+        // Soft landing — clear this pad.
+        if mailRunIndex < mailRunCleared.count {
+            mailRunCleared[mailRunIndex] = true
+        }
+        if mailRunIndex + 1 >= pads.count {
+            // All pads cleared — mission complete.
+            shipY = Double(pad.top) - 6
+            vx = 0
+            vy = 0
+            landingImpact = abs(vy)
+            score = scoreForMailRunWin()
+            phase = .landed
+        } else {
+            // Advance to the next pad. Lift the ship just clear of
+            // the pad surface so we don't immediately re-collide,
+            // then zero vertical velocity (a tap-and-go).
+            shipY = Double(pad.top) - 6
+            vy = -0.6        // pop the ship off the pad — small assist
+            mailRunIndex += 1
+        }
+    }
+
+    /// Final score for a completed Mail Run mission: base for the win,
+    /// plus fuel remaining, plus time bonus, plus a landing-softness
+    /// bonus on the final touchdown.
+    private func scoreForMailRunWin() -> Int {
+        let base       = 2000
+        let fuelBonus  = Int(fuel * 10)
+        let timeBonus  = (timeRemainingTicks / 6)            // 10pt per second remaining
+        let softBonus  = max(0, Int((landMaxVY - landingImpact) * 600))
+        return base + fuelBonus + timeBonus + softBonus
+    }
+
+    /// Partial-credit score when the mission fails (timeout or crash).
+    /// Rewards any pads already delivered so a near-completion run is
+    /// worth more than an immediate crash.
+    private func scoreForMailRunPartial() -> Int {
+        let cleared = mailRunCleared.filter { $0 }.count
+        return cleared * 500 + Int(fuel * 4)
     }
 
     // MARK: - Shared crash
