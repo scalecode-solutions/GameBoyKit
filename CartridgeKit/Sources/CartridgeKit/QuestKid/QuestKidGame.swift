@@ -127,6 +127,7 @@ public struct QuestKidGame: View {
         let hud = QuestKidLayout.hudHeight
         renderRoom(into: &ctx, scale: scale,
                    room: state.currentRoom,
+                   theme: state.currentDungeon.theme,
                    pixelOffsetX: 0, pixelOffsetY: hud)
         renderHearts(into: &ctx, scale: scale,
                      hearts: state.currentHearts,
@@ -254,21 +255,25 @@ public struct QuestKidGame: View {
 
     private func renderRoom(
         into ctx: inout GraphicsContext, scale: CGSize,
-        room: Room, pixelOffsetX: Int, pixelOffsetY: Int
+        room: Room, theme: DungeonTheme,
+        pixelOffsetX: Int, pixelOffsetY: Int
     ) {
         for row in 0..<QuestKidLayout.roomRows {
             for col in 0..<QuestKidLayout.roomCols {
                 let tile = room.tile(col: col, row: row)
                 let x = pixelOffsetX + col * QuestKidLayout.tileSize
                 let y = pixelOffsetY + row * QuestKidLayout.tileSize
-                drawTile(into: &ctx, scale: scale, x: x, y: y, tile: tile)
+                drawTile(into: &ctx, scale: scale, x: x, y: y,
+                         tile: tile, theme: theme, col: col, row: row)
             }
         }
     }
 
     private func drawTile(
         into ctx: inout GraphicsContext, scale: CGSize,
-        x: Int, y: Int, tile: TileKind
+        x: Int, y: Int, tile: TileKind,
+        theme: DungeonTheme = .ruins,
+        col: Int = 0, row: Int = 0
     ) {
         let t = QuestKidLayout.tileSize
         switch tile {
@@ -316,17 +321,12 @@ public struct QuestKidGame: View {
             ctx.fillPixel(x: x + 6, y: y + 6, width: 4, height: 4, color: palette.lcdShade0, scale: scale)
 
         case .stone:
-            // Dungeon floor — darker than grass, with subtle grout lines.
-            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade1, scale: scale)
-            ctx.fillPixel(x: x, y: y + t - 1, width: t, height: 1, color: palette.lcdShade2, scale: scale)
-            ctx.fillPixel(x: x + t - 1, y: y, width: 1, height: t, color: palette.lcdShade2, scale: scale)
+            drawStoneFloor(into: &ctx, scale: scale, x: x, y: y,
+                           theme: theme, col: col, row: row)
 
         case .wallDark:
-            // Dungeon wall — slate with chunky brick outline.
-            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: x + 1, y: y + 1, width: t - 2, height: t - 2, color: palette.lcdShade2, scale: scale)
-            // Horizontal seams
-            ctx.fillPixel(x: x, y: y + 7,  width: t, height: 1, color: palette.lcdShade3, scale: scale)
+            drawDungeonWall(into: &ctx, scale: scale, x: x, y: y,
+                            theme: theme, col: col, row: row)
 
         case .lockedDoor:
             // Heavy stone arch with a visible padlock.
@@ -356,6 +356,156 @@ public struct QuestKidGame: View {
             ctx.fillPixel(x: x + 7,  y: y + 9,  width: 1, height: 1, color: palette.lcdShade3, scale: scale)
             ctx.fillPixel(x: x + 8,  y: y + 11, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
             ctx.fillPixel(x: x + 9,  y: y + 12, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+        }
+    }
+
+    // MARK: - Themed dungeon floor + wall
+
+    /// Theme-aware stone floor tile. Each dungeon's `DungeonTheme` gets
+    /// its own base shade + accent stipple pattern, all within the
+    /// 4-shade LCD palette.
+    private func drawStoneFloor(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        x: Int, y: Int,
+        theme: DungeonTheme, col: Int, row: Int
+    ) {
+        let t = QuestKidLayout.tileSize
+        // Deterministic per-tile "random" — same input always paints same output.
+        let seed = (col &* 13) ^ (row &* 31)
+
+        switch theme {
+        case .serpentine:
+            // Pale stone with a faint diagonal scale accent on every
+            // other tile. Reads as a snake-skin grout.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: x + t - 1, y: y, width: 1, height: t, color: palette.lcdShade2, scale: scale)
+            if seed & 1 == 0 {
+                ctx.fillPixel(x: x + 4, y: y + 4, color: palette.lcdShade2, scale: scale)
+                ctx.fillPixel(x: x + 5, y: y + 5, color: palette.lcdShade2, scale: scale)
+                ctx.fillPixel(x: x + 6, y: y + 6, color: palette.lcdShade2, scale: scale)
+            }
+
+        case .caverns:
+            // Wet dark stone with intermittent water drops.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: x, y: y + t - 1, width: t, height: 1, color: palette.lcdShade2, scale: scale)
+            // 1 in 3 tiles has a small puddle
+            if seed % 3 == 0 {
+                ctx.fillPixel(x: x + 5, y: y + 7, width: 4, height: 2, color: palette.lcdShade2, scale: scale)
+                ctx.fillPixel(x: x + 6, y: y + 8, width: 1, height: 1, color: palette.lcdShade0, scale: scale)
+            }
+            if seed % 5 == 0 {
+                ctx.fillPixel(x: x + 11, y: y + 12, width: 2, height: 1, color: palette.lcdShade2, scale: scale)
+            }
+
+        case .library:
+            // Bright stone (parchment-toned) with subtle dust motes.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x, y: y + t - 1, width: t, height: 1, color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: x + t - 1, y: y, width: 1, height: t, color: palette.lcdShade1, scale: scale)
+            if seed % 4 == 0 {
+                ctx.fillPixel(x: x + 6, y: y + 10, color: palette.lcdShade2, scale: scale)
+            }
+
+        case .boneyard:
+            // Pale bone-toned floor with occasional bone-shard pixel.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x, y: y + t - 1, width: t, height: 1, color: palette.lcdShade2, scale: scale)
+            // 1 in 4 tiles has a bone shard fragment
+            if seed % 4 == 0 {
+                ctx.fillPixel(x: x + 3, y: y + 9, width: 4, height: 1, color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: x + 2, y: y + 9, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: x + 7, y: y + 9, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            }
+
+        case .grove:
+            // Mossy stone — slightly lighter overall with leaf-stipple accents.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: x + t - 1, y: y, width: 1, height: t, color: palette.lcdShade2, scale: scale)
+            // 1 in 3 tiles has a few leaves
+            if seed % 3 == 0 {
+                ctx.fillPixel(x: x + 4, y: y + 4, color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: x + 11, y: y + 11, color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: x + 7, y: y + 8, color: palette.lcdShade2, scale: scale)
+            }
+
+        case .meadow, .ruins:
+            // Default — the original Phase-3 stone look. Used by the
+            // tutorial vault and by Hollow Halls.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: x, y: y + t - 1, width: t, height: 1, color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: x + t - 1, y: y, width: 1, height: t, color: palette.lcdShade2, scale: scale)
+        }
+    }
+
+    /// Theme-aware dungeon wall tile.
+    private func drawDungeonWall(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        x: Int, y: Int,
+        theme: DungeonTheme, col: Int, row: Int
+    ) {
+        let t = QuestKidLayout.tileSize
+        let seed = (col &* 13) ^ (row &* 31)
+
+        switch theme {
+        case .serpentine:
+            // Tightly-mortared brick — many horizontal seams to evoke
+            // ribs/scales.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 1, width: t - 2, height: t - 2, color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: x, y: y + 4,  width: t, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x, y: y + 9,  width: t, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x, y: y + 13, width: t, height: 1, color: palette.lcdShade3, scale: scale)
+
+        case .caverns:
+            // Damp cave wall — irregular dark crags.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 2, width: t - 4, height: t - 4, color: palette.lcdShade2, scale: scale)
+            // Cragged outline (deterministic per tile)
+            ctx.fillPixel(x: x + (seed & 7), y: y + 3, width: 2, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 10, y: y + 11, width: 3, height: 1, color: palette.lcdShade3, scale: scale)
+
+        case .library:
+            // Wall lined with stacked book spines (alternating fills).
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
+            // 4 vertical "books" (each 3px wide w/ 1px gap), heights alternate
+            for i in 0..<4 {
+                let bx = x + 1 + i * 4
+                let topInset = (i % 2 == 0) ? 2 : 4
+                let bottomInset = (i % 2 == 0) ? 2 : 1
+                ctx.fillPixel(x: bx, y: y + topInset,
+                              width: 3, height: t - topInset - bottomInset,
+                              color: i % 2 == 0 ? palette.lcdShade1 : palette.lcdShade2,
+                              scale: scale)
+            }
+
+        case .boneyard:
+            // Crumbling wall with cracks and an occasional skull pixel.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 1, width: t - 2, height: t - 2, color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: x, y: y + 7, width: t, height: 1, color: palette.lcdShade3, scale: scale)
+            // Cracks
+            ctx.fillPixel(x: x + 3, y: y + 2,  width: 1, height: 4, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 12, y: y + 10, width: 1, height: 4, color: palette.lcdShade3, scale: scale)
+
+        case .grove:
+            // Stone wall draped in vine/leaf accents.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 1, width: t - 2, height: t - 2, color: palette.lcdShade2, scale: scale)
+            // Leaf clumps on alternate tiles
+            if seed & 1 == 0 {
+                ctx.fillPixel(x: x + 3, y: y + 11, width: 2, height: 3, color: palette.lcdShade1, scale: scale)
+                ctx.fillPixel(x: x + 2, y: y + 13, color: palette.lcdShade1, scale: scale)
+            } else {
+                ctx.fillPixel(x: x + 11, y: y + 2, width: 2, height: 3, color: palette.lcdShade1, scale: scale)
+                ctx.fillPixel(x: x + 13, y: y + 4, color: palette.lcdShade1, scale: scale)
+            }
+
+        case .meadow, .ruins:
+            // Default dark slate brick — original look.
+            ctx.fillPixel(x: x, y: y, width: t, height: t, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 1, width: t - 2, height: t - 2, color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: x, y: y + 7,  width: t, height: 1, color: palette.lcdShade3, scale: scale)
         }
     }
 
@@ -1080,11 +1230,14 @@ public struct QuestKidGame: View {
         case .up:    fromOffY =  Int(Double(ph) * p); toOffY = -ph + Int(Double(ph) * p)
         }
         let hud = QuestKidLayout.hudHeight
+        let theme = state.currentDungeon.theme
         renderRoom(into: &ctx, scale: scale,
                    room: state.rooms[from],
+                   theme: theme,
                    pixelOffsetX: fromOffX, pixelOffsetY: hud + fromOffY)
         renderRoom(into: &ctx, scale: scale,
                    room: state.rooms[to],
+                   theme: theme,
                    pixelOffsetX: toOffX,   pixelOffsetY: hud + toOffY)
         // Player rides along with the "from" room.
         renderPlayer(into: &ctx, scale: scale,
