@@ -38,7 +38,6 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
     private let startLabel: String
     private let selectLabel: String
     private let menuLabel: String
-    private let theme: GameBoyTheme
     @Binding private var powerOn: Bool
 
     // MARK: - Owned state
@@ -72,16 +71,19 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         self.selectLabel = selectLabel
         self.menuLabel = menuLabel
         self._powerOn = powerOn
-        self.theme = theme
+        // Constructor args seed the DeviceSettings on first launch. Once
+        // saved, the persisted values take over and the args are ignored
+        // (consumer can pass persistSettings: false to bypass).
         self._settings = State(initialValue: DeviceSettings(
             paletteSet: palette,
+            theme: theme,
             persisted: persistSettings
         ))
     }
 
     /// The concrete palette in effect right now.
     private var resolvedPalette: GameBoyPalette {
-        settings.paletteSet.resolve(for: theme, system: systemScheme)
+        settings.paletteSet.resolve(for: settings.theme, system: systemScheme)
     }
 
     public var body: some View {

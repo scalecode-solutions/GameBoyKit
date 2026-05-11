@@ -247,6 +247,169 @@ public extension GameBoyPalette {
         speakerGrilleColor:    Color(red: 0.45, green: 0.42, blue: 0.50)
     )
 
+    /// "Atomic Red" — coral red shell, dark crimson bezel, gold A/B
+    /// for that "warning sign" / sports car energy.
+    static let atomicRedLight = GameBoyPalette(
+        shellTop:              Color(red: 0.94, green: 0.42, blue: 0.36),
+        shellBottom:           Color(red: 0.86, green: 0.32, blue: 0.26),
+        shellEdgeHighlight:    Color.white.opacity(0.50),
+        shellEdgeShadow:       Color.black.opacity(0.22),
+
+        screenBezel:           Color(red: 0.32, green: 0.10, blue: 0.10),
+        screenBezelEdge:       Color(red: 0.16, green: 0.04, blue: 0.04),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 1.00, green: 0.92, blue: 0.30),
+        ledOff:                Color(red: 0.42, green: 0.36, blue: 0.08),
+        ledRing:               Color.black.opacity(0.45),
+
+        actionButton:          Color(red: 0.96, green: 0.78, blue: 0.18),
+        actionButtonHighlight: Color(red: 1.00, green: 0.92, blue: 0.55),
+        actionButtonShadow:    Color(red: 0.50, green: 0.32, blue: 0.04),
+        actionButtonLabel:     Color(red: 0.22, green: 0.06, blue: 0.06),
+
+        systemButton:          Color(red: 0.55, green: 0.52, blue: 0.50),
+        systemButtonHighlight: Color(red: 0.80, green: 0.78, blue: 0.76),
+        systemButtonLabel:     Color(red: 0.28, green: 0.08, blue: 0.08),
+
+        dpad:                  Color(red: 0.16, green: 0.16, blue: 0.18),
+        dpadHighlight:         Color(red: 0.34, green: 0.34, blue: 0.36),
+        dpadShadow:            Color.black.opacity(0.55),
+
+        headlineColor:         Color(red: 0.24, green: 0.06, blue: 0.06),
+        subtitleColor:         Color(red: 0.42, green: 0.12, blue: 0.10),
+        brandColor:            Color(red: 0.32, green: 0.08, blue: 0.06),
+        speakerGrilleColor:    Color(red: 0.55, green: 0.46, blue: 0.42)
+    )
+
+    /// "Crimson" — deep blood-red chassis with neon yellow A/B. The
+    /// dark-mode pair for Atomic Red.
+    static let atomicRedDark = GameBoyPalette(
+        shellTop:              Color(red: 0.32, green: 0.10, blue: 0.12),
+        shellBottom:           Color(red: 0.20, green: 0.06, blue: 0.08),
+        shellEdgeHighlight:    Color.white.opacity(0.12),
+        shellEdgeShadow:       Color.black.opacity(0.60),
+
+        screenBezel:           Color(red: 0.14, green: 0.02, blue: 0.04),
+        screenBezelEdge:       Color(red: 0.06, green: 0.01, blue: 0.02),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.90, blue: 0.25),
+        ledOff:                Color(red: 0.36, green: 0.30, blue: 0.06),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 1.00, green: 0.82, blue: 0.18),
+        actionButtonHighlight: Color(red: 1.00, green: 0.95, blue: 0.55),
+        actionButtonShadow:    Color(red: 0.40, green: 0.22, blue: 0.04),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.50, green: 0.46, blue: 0.46),
+        systemButtonHighlight: Color(red: 0.72, green: 0.68, blue: 0.68),
+        systemButtonLabel:     Color(red: 0.90, green: 0.82, blue: 0.82),
+
+        dpad:                  Color(red: 0.45, green: 0.42, blue: 0.44),
+        dpadHighlight:         Color(red: 0.62, green: 0.58, blue: 0.60),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 0.98, green: 0.92, blue: 0.86),
+        subtitleColor:         Color(red: 0.82, green: 0.68, blue: 0.62),
+        brandColor:            Color(red: 0.92, green: 0.78, blue: 0.72),
+        speakerGrilleColor:    Color(red: 0.45, green: 0.36, blue: 0.34)
+    )
+
+    /// "Ocean Blue" — sky-blue shell, navy bezel, coral A/B.
+    static let oceanBlueLight = GameBoyPalette(
+        shellTop:              Color(red: 0.58, green: 0.78, blue: 0.92),
+        shellBottom:           Color(red: 0.42, green: 0.64, blue: 0.84),
+        shellEdgeHighlight:    Color.white.opacity(0.55),
+        shellEdgeShadow:       Color.black.opacity(0.20),
+
+        screenBezel:           Color(red: 0.10, green: 0.20, blue: 0.36),
+        screenBezelEdge:       Color(red: 0.04, green: 0.10, blue: 0.20),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 0.98, green: 0.46, blue: 0.34),
+        ledOff:                Color(red: 0.40, green: 0.16, blue: 0.10),
+        ledRing:               Color.black.opacity(0.45),
+
+        actionButton:          Color(red: 0.96, green: 0.46, blue: 0.32),
+        actionButtonHighlight: Color(red: 1.00, green: 0.70, blue: 0.55),
+        actionButtonShadow:    Color(red: 0.46, green: 0.14, blue: 0.06),
+        actionButtonLabel:     Color(red: 0.06, green: 0.14, blue: 0.28),
+
+        systemButton:          Color(red: 0.55, green: 0.58, blue: 0.62),
+        systemButtonHighlight: Color(red: 0.80, green: 0.82, blue: 0.86),
+        systemButtonLabel:     Color(red: 0.08, green: 0.16, blue: 0.30),
+
+        dpad:                  Color(red: 0.14, green: 0.16, blue: 0.22),
+        dpadHighlight:         Color(red: 0.32, green: 0.36, blue: 0.44),
+        dpadShadow:            Color.black.opacity(0.55),
+
+        headlineColor:         Color(red: 0.06, green: 0.14, blue: 0.32),
+        subtitleColor:         Color(red: 0.10, green: 0.22, blue: 0.42),
+        brandColor:            Color(red: 0.08, green: 0.18, blue: 0.36),
+        speakerGrilleColor:    Color(red: 0.42, green: 0.50, blue: 0.58)
+    )
+
+    /// "Abyss" — deep navy chassis with bright coral A/B. The
+    /// dark-mode pair for Ocean Blue.
+    static let oceanBlueDark = GameBoyPalette(
+        shellTop:              Color(red: 0.10, green: 0.16, blue: 0.30),
+        shellBottom:           Color(red: 0.06, green: 0.10, blue: 0.20),
+        shellEdgeHighlight:    Color.white.opacity(0.12),
+        shellEdgeShadow:       Color.black.opacity(0.60),
+
+        screenBezel:           Color(red: 0.04, green: 0.06, blue: 0.14),
+        screenBezelEdge:       Color(red: 0.02, green: 0.03, blue: 0.08),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.46, blue: 0.36),
+        ledOff:                Color(red: 0.34, green: 0.12, blue: 0.08),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 1.00, green: 0.50, blue: 0.38),
+        actionButtonHighlight: Color(red: 1.00, green: 0.75, blue: 0.62),
+        actionButtonShadow:    Color(red: 0.30, green: 0.08, blue: 0.04),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.48, green: 0.52, blue: 0.58),
+        systemButtonHighlight: Color(red: 0.70, green: 0.74, blue: 0.80),
+        systemButtonLabel:     Color(red: 0.85, green: 0.88, blue: 0.94),
+
+        dpad:                  Color(red: 0.40, green: 0.44, blue: 0.52),
+        dpadHighlight:         Color(red: 0.58, green: 0.62, blue: 0.70),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 0.92, green: 0.95, blue: 1.00),
+        subtitleColor:         Color(red: 0.62, green: 0.72, blue: 0.86),
+        brandColor:            Color(red: 0.74, green: 0.84, blue: 0.96),
+        speakerGrilleColor:    Color(red: 0.34, green: 0.40, blue: 0.50)
+    )
+
     /// "Charcoal DMG" — neutral dark variant of the classic gray
     /// palette. Designed to pair with `classicDMGLight`.
     static let classicDMGDark = GameBoyPalette(
@@ -328,11 +491,26 @@ public extension GameBoyPaletteSet {
         dark:  .classicDMGDark
     )
 
-    /// All built-in sets, in the order they appear in the device menu's
-    /// theme picker.
+    /// Atomic Red — coral light, deep crimson dark, gold A/B.
+    static let atomicRed = GameBoyPaletteSet(
+        light: .atomicRedLight,
+        dark:  .atomicRedDark
+    )
+
+    /// Ocean Blue — sky-blue light, deep navy dark, coral A/B.
+    static let oceanBlue = GameBoyPaletteSet(
+        light: .oceanBlueLight,
+        dark:  .oceanBlueDark
+    )
+
+    /// All built-in sets, in the order they appear in the device
+    /// menu's COLOR picker. The string is the persistence id (stable
+    /// across renames); the display name is what the menu shows.
     static let builtIns: [(id: String, name: String, set: GameBoyPaletteSet)] = [
-        ("dmgMeetsColor", "DMG × COLOR", .dmgMeetsColor),
-        ("classicDMG",    "CLASSIC DMG", .classicDMG)
+        ("dmgMeetsColor", "BERRY",   .dmgMeetsColor),
+        ("classicDMG",    "STONE",   .classicDMG),
+        ("atomicRed",     "ATOMIC",  .atomicRed),
+        ("oceanBlue",     "OCEAN",   .oceanBlue)
     ]
 
     /// Look up a built-in set by its stable id.

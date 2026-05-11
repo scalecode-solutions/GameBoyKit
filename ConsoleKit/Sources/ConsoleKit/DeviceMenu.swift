@@ -22,10 +22,11 @@ internal struct DeviceMenu: View {
     }
 
     private enum Item: Int, CaseIterable {
-        case theme, haptics, about, inputTest
+        case color, theme, haptics, about, inputTest
 
         var title: String {
             switch self {
+            case .color:     return "COLOR"
             case .theme:     return "THEME"
             case .haptics:   return "HAPTICS"
             case .about:     return "ABOUT"
@@ -144,10 +145,19 @@ internal struct DeviceMenu: View {
 
     private func valueLabel(for item: Item) -> String? {
         switch item {
-        case .theme:     return settings.paletteSet.displayName
+        case .color:     return settings.paletteSet.displayName
+        case .theme:     return themeDisplayName(settings.theme)
         case .haptics:   return settings.hapticsEnabled ? "ON" : "OFF"
         case .about,
              .inputTest: return "─►"
+        }
+    }
+
+    private func themeDisplayName(_ theme: GameBoyTheme) -> String {
+        switch theme {
+        case .light:  return "LIGHT"
+        case .dark:   return "DARK"
+        case .system: return "SYSTEM"
         }
     }
 
@@ -155,12 +165,17 @@ internal struct DeviceMenu: View {
     private func adjustSelection(by delta: Int) {
         guard let item = Item(rawValue: selectedIndex) else { return }
         switch item {
-        case .theme:
+        case .color:
             let builtIns = GameBoyPaletteSet.builtIns
             guard !builtIns.isEmpty else { return }
             let currentIdx = builtIns.firstIndex(where: { $0.set == settings.paletteSet }) ?? 0
             let next = (currentIdx + delta + builtIns.count) % builtIns.count
             settings.paletteSet = builtIns[next].set
+        case .theme:
+            let order: [GameBoyTheme] = [.system, .light, .dark]
+            let currentIdx = order.firstIndex(of: settings.theme) ?? 0
+            let next = (currentIdx + delta + order.count) % order.count
+            settings.theme = order[next]
         case .haptics:
             settings.hapticsEnabled.toggle()
         case .about, .inputTest:
@@ -173,6 +188,7 @@ internal struct DeviceMenu: View {
     private func activateSelection() {
         guard let item = Item(rawValue: selectedIndex) else { return }
         switch item {
+        case .color:     adjustSelection(by: +1)        // A also cycles color
         case .theme:     adjustSelection(by: +1)        // A also cycles theme
         case .haptics:   settings.hapticsEnabled.toggle()
         case .about:     subScreen = .about

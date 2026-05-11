@@ -29,6 +29,10 @@ public final class DeviceSettings {
         didSet { persist() }
     }
 
+    public var theme: GameBoyTheme {
+        didSet { persist() }
+    }
+
     // MARK: - Init
 
     @ObservationIgnored
@@ -37,6 +41,7 @@ public final class DeviceSettings {
     public init(
         hapticsEnabled: Bool = true,
         paletteSet: GameBoyPaletteSet = .dmgMeetsColor,
+        theme: GameBoyTheme = .system,
         persisted: Bool = true
     ) {
         self.persisted = persisted
@@ -44,9 +49,11 @@ public final class DeviceSettings {
         if persisted, let stored = Self.load() {
             self.hapticsEnabled = stored.hapticsEnabled
             self.paletteSet = stored.paletteSet
+            self.theme = stored.theme
         } else {
             self.hapticsEnabled = hapticsEnabled
             self.paletteSet = paletteSet
+            self.theme = theme
         }
     }
 
@@ -54,23 +61,28 @@ public final class DeviceSettings {
 
     private static let hapticsKey = "gbk.hapticsEnabled"
     private static let paletteKey = "gbk.paletteSetID"
+    private static let themeKey   = "gbk.theme"
 
     private struct StoredValues {
         let hapticsEnabled: Bool
         let paletteSet: GameBoyPaletteSet
+        let theme: GameBoyTheme
     }
 
     private static func load() -> StoredValues? {
         let defaults = UserDefaults.standard
         // Only treat as "stored" if at least one key has been written.
         guard defaults.object(forKey: hapticsKey) != nil
-                || defaults.object(forKey: paletteKey) != nil else {
+                || defaults.object(forKey: paletteKey) != nil
+                || defaults.object(forKey: themeKey) != nil else {
             return nil
         }
         let haptics = defaults.object(forKey: hapticsKey) as? Bool ?? true
-        let id = defaults.string(forKey: paletteKey) ?? "dmgMeetsColor"
-        let palette = GameBoyPaletteSet.builtIn(id: id) ?? .dmgMeetsColor
-        return StoredValues(hapticsEnabled: haptics, paletteSet: palette)
+        let paletteID = defaults.string(forKey: paletteKey) ?? "dmgMeetsColor"
+        let palette = GameBoyPaletteSet.builtIn(id: paletteID) ?? .dmgMeetsColor
+        let themeRaw = defaults.string(forKey: themeKey) ?? "system"
+        let theme = GameBoyTheme(rawValue: themeRaw) ?? .system
+        return StoredValues(hapticsEnabled: haptics, paletteSet: palette, theme: theme)
     }
 
     private func persist() {
@@ -78,5 +90,6 @@ public final class DeviceSettings {
         let defaults = UserDefaults.standard
         defaults.set(hapticsEnabled, forKey: Self.hapticsKey)
         defaults.set(paletteSet.builtInID, forKey: Self.paletteKey)
+        defaults.set(theme.rawValue, forKey: Self.themeKey)
     }
 }
