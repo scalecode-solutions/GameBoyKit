@@ -14,6 +14,7 @@ internal struct PowerSwitch: View {
     let palette: GameBoyPalette
 
     @State private var hapticTrigger: Int = 0
+    @Environment(\.deviceSettings) private var settings
 
     private let trackWidth: CGFloat = 54
     private let trackHeight: CGFloat = 17
@@ -102,7 +103,7 @@ internal struct PowerSwitch: View {
         .contentShape(Rectangle())
         .onTapGesture {
             isOn.toggle()
-            hapticTrigger &+= 1
+            if settings.hapticsEnabled { hapticTrigger &+= 1 }
         }
         .animation(.spring(response: 0.20, dampingFraction: 0.72), value: isOn)
         .sensoryFeedback(.impact(weight: .medium, intensity: 0.85), trigger: hapticTrigger)

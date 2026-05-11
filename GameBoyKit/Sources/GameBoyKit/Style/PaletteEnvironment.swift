@@ -13,6 +13,16 @@ private struct GameBoyPowerOnKey: EnvironmentKey {
     static let defaultValue: Bool = true
 }
 
+private struct DeviceSettingsKey: EnvironmentKey {
+    // DeviceSettings is @MainActor @Observable, which Swift 6 treats
+    // as Sendable. We construct via `MainActor.assumeIsolated` because
+    // the type's init is main-actor-isolated; SwiftUI always reads
+    // env defaults on the main actor, so this is correct at runtime.
+    static let defaultValue: DeviceSettings = MainActor.assumeIsolated {
+        DeviceSettings(persisted: false)
+    }
+}
+
 public extension EnvironmentValues {
     var gameBoyPalette: GameBoyPalette {
         get { self[GameBoyPaletteKey.self] }
@@ -26,5 +36,14 @@ public extension EnvironmentValues {
     var gameBoyPowerOn: Bool {
         get { self[GameBoyPowerOnKey.self] }
         set { self[GameBoyPowerOnKey.self] = newValue }
+    }
+
+    /// Runtime device settings (haptics, theme, …). `GameBoyView`
+    /// injects the live instance so both the chassis (e.g. button
+    /// haptics) and the OS layer (e.g. the device menu) read and
+    /// write the same source of truth.
+    var deviceSettings: DeviceSettings {
+        get { self[DeviceSettingsKey.self] }
+        set { self[DeviceSettingsKey.self] = newValue }
     }
 }

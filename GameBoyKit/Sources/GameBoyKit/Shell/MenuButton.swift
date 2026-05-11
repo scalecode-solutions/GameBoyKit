@@ -13,6 +13,7 @@ internal struct MenuButton: View {
 
     @State private var isPressed: Bool = false
     @State private var hapticTrigger: Int = 0
+    @Environment(\.deviceSettings) private var settings
 
     var body: some View {
         VStack(spacing: 3) {
@@ -65,7 +66,7 @@ internal struct MenuButton: View {
                         if !isPressed {
                             isPressed = true
                             input.setButton(.menu, pressed: true)
-                            hapticTrigger &+= 1
+                            if settings.hapticsEnabled { hapticTrigger &+= 1 }
                         }
                     }
                     .onEnded { _ in

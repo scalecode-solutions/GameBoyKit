@@ -10,6 +10,7 @@ internal struct DPad: View {
 
     @State private var current: DPadDirection? = nil
     @State private var hapticTrigger: Int = 0
+    @Environment(\.deviceSettings) private var settings
 
     var body: some View {
         GeometryReader { proxy in
@@ -62,7 +63,9 @@ internal struct DPad: View {
                         if direction != current {
                             current = direction
                             input.setDPad(direction)
-                            if direction != nil { hapticTrigger &+= 1 }
+                            if direction != nil && settings.hapticsEnabled {
+                                hapticTrigger &+= 1
+                            }
                         }
                     }
                     .onEnded { _ in

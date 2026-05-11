@@ -38,13 +38,13 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
     private let startLabel: String
     private let selectLabel: String
     private let menuLabel: String
-    private let palette: GameBoyPaletteSet
     private let theme: GameBoyTheme
     @Binding private var powerOn: Bool
 
     // MARK: - Owned state
 
     @State private var input = GameBoyInput()
+    @State private var settings: DeviceSettings
     @Environment(\.colorScheme) private var systemScheme
 
     public init(
@@ -59,7 +59,8 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         menuLabel: String = "MENU",
         powerOn: Binding<Bool> = .constant(true),
         palette: GameBoyPaletteSet = .dmgMeetsColor,
-        theme: GameBoyTheme = .system
+        theme: GameBoyTheme = .system,
+        persistSettings: Bool = true
     ) {
         self.screenBuilder   = screen
         self.headlineBuilder = headline
@@ -71,13 +72,16 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         self.selectLabel = selectLabel
         self.menuLabel = menuLabel
         self._powerOn = powerOn
-        self.palette = palette
         self.theme = theme
+        self._settings = State(initialValue: DeviceSettings(
+            paletteSet: palette,
+            persisted: persistSettings
+        ))
     }
 
     /// The concrete palette in effect right now.
     private var resolvedPalette: GameBoyPalette {
-        palette.resolve(for: theme, system: systemScheme)
+        settings.paletteSet.resolve(for: theme, system: systemScheme)
     }
 
     public var body: some View {
@@ -92,6 +96,7 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         // Cartridges / shelf views inside the screen slot read these.
         .environment(\.gameBoyPalette, palette)
         .environment(\.gameBoyPowerOn, powerOn)
+        .environment(\.deviceSettings, settings)
         // We run noticeably taller than the real DMG (~0.61) so that
         // the controls sit closer to the bottom of the device — that
         // puts the D-pad and A/B in natural thumb territory when the

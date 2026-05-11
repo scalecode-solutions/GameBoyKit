@@ -327,4 +327,27 @@ public extension GameBoyPaletteSet {
         light: .classicDMGLight,
         dark:  .classicDMGDark
     )
+
+    /// All built-in sets, in the order they appear in the device menu's
+    /// theme picker.
+    static let builtIns: [(id: String, name: String, set: GameBoyPaletteSet)] = [
+        ("dmgMeetsColor", "DMG × COLOR", .dmgMeetsColor),
+        ("classicDMG",    "CLASSIC DMG", .classicDMG)
+    ]
+
+    /// Look up a built-in set by its stable id.
+    static func builtIn(id: String) -> GameBoyPaletteSet? {
+        builtIns.first(where: { $0.id == id })?.set
+    }
+
+    /// Returns the built-in id of this set if it matches one of the
+    /// built-ins by value, else `nil` (custom palette).
+    var builtInID: String? {
+        Self.builtIns.first(where: { $0.set == self })?.id
+    }
+
+    /// User-facing name for this set if it's a built-in, else "CUSTOM".
+    var displayName: String {
+        Self.builtIns.first(where: { $0.set == self })?.name ?? "CUSTOM"
+    }
 }

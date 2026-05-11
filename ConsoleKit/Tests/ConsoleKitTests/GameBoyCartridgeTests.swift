@@ -33,10 +33,13 @@ struct GameBoyCartridgeTests {
         #expect(a != c)
     }
 
-    @Test func pixelGridIs160x120() {
-        #expect(PixelGrid.width == 160)
-        #expect(PixelGrid.height == 120)
-        // 4:3 aspect (160/120 = 4/3)
-        #expect(PixelGrid.width * 3 == PixelGrid.height * 4)
+    @Test func pixelGridIs256x144_andTrueSixteenNine() {
+        #expect(PixelGrid.width == 256)
+        #expect(PixelGrid.height == 144)
+        // 16:9 (256 × 9 == 144 × 16)
+        #expect(PixelGrid.width * 9 == PixelGrid.height * 16)
+        // Both dimensions divisible by 8 → tidy 32×18 grid for 8px cells
+        #expect(PixelGrid.width % 8 == 0)
+        #expect(PixelGrid.height % 8 == 0)
     }
 }

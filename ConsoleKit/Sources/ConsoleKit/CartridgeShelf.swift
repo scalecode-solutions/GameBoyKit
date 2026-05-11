@@ -30,6 +30,7 @@ public struct CartridgeShelf: View {
     @State private var phase: Phase = .boot
     @State private var selectedIndex: Int = 0
     @State private var showMenuConfirm: Bool = false
+    @State private var showDeviceMenu: Bool = false
     @Environment(\.gameBoyPalette) private var palette
     @Environment(\.gameBoyPowerOn) private var powerOn
 
@@ -44,7 +45,20 @@ public struct CartridgeShelf: View {
             case .boot:
                 bootSplash
             case .menu:
-                menuView
+                ZStack {
+                    menuView
+                    if showDeviceMenu {
+                        DeviceMenu(
+                            input: input,
+                            palette: palette,
+                            onClose: { showDeviceMenu = false }
+                        )
+                    }
+                }
+                .onChange(of: input.menuPressed) { _, pressed in
+                    guard powerOn, pressed else { return }
+                    showDeviceMenu.toggle()
+                }
             case .playing(let cart):
                 ZStack {
                     // While the confirmation dialog is open we override
@@ -185,7 +199,7 @@ public struct CartridgeShelf: View {
             }
         }
         .onChange(of: input.dpad) { _, newValue in
-            guard powerOn, !cartridges.isEmpty else { return }
+            guard powerOn, !showDeviceMenu, !cartridges.isEmpty else { return }
             if newValue?.isUp == true {
                 selectedIndex = (selectedIndex - 1 + cartridges.count) % cartridges.count
             } else if newValue?.isDown == true {
@@ -193,7 +207,8 @@ public struct CartridgeShelf: View {
             }
         }
         .onChange(of: input.aPressed) { _, pressed in
-            guard powerOn, pressed, cartridges.indices.contains(selectedIndex) else { return }
+            guard powerOn, !showDeviceMenu, pressed,
+                  cartridges.indices.contains(selectedIndex) else { return }
             phase = .playing(cartridges[selectedIndex])
         }
     }
