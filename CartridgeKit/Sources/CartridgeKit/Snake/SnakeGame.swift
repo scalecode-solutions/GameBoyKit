@@ -1,4 +1,6 @@
 import SwiftUI
+import GameBoyKit
+import ConsoleKit
 
 /// The Snake gameplay view. Hosts a `SnakeState` model, drives ticks
 /// while the model is in `.playing`, and renders the snake/food/HUD

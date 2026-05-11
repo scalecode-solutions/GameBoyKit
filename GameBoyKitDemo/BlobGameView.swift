@@ -1,5 +1,6 @@
 import SwiftUI
 import GameBoyKit
+import ConsoleKit
 
 /// Placeholder cartridge factory so we can show the menu has multiple
 /// rows even before more games exist. Renders a "COMING SOON" stub

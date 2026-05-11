@@ -1,5 +1,7 @@
 import SwiftUI
 import GameBoyKit
+import ConsoleKit
+import CartridgeKit
 
 struct ContentView: View {
     @State private var isPoweredOn: Bool = true

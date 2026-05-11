@@ -1,4 +1,5 @@
 import SwiftUI
+import GameBoyKit
 
 /// The view that lives inside `GameBoyView`'s screen slot when you
 /// want a multi-game console experience. Manages three phases:
@@ -28,6 +29,7 @@ public struct CartridgeShelf: View {
 
     @State private var phase: Phase = .boot
     @State private var selectedIndex: Int = 0
+    @State private var showMenuConfirm: Bool = false
     @Environment(\.gameBoyPalette) private var palette
     @Environment(\.gameBoyPowerOn) private var powerOn
 
@@ -44,11 +46,36 @@ public struct CartridgeShelf: View {
             case .menu:
                 menuView
             case .playing(let cart):
-                cart.make(input)
-                    .onChange(of: input.startPressed) { _, pressed in
-                        guard powerOn, pressed else { return }
-                        phase = .menu
+                ZStack {
+                    // While the confirmation dialog is open we override
+                    // `gameBoyPowerOn` inside the cartridge subtree only.
+                    // Cartridges already pause their tick + ignore input
+                    // when they see powerOn = false, so this freezes the
+                    // game without touching the LCD's visual dimming
+                    // (which is driven by the binding at the GameBoyView
+                    // level, not the env value).
+                    cart.make(input)
+                        .environment(\.gameBoyPowerOn, powerOn && !showMenuConfirm)
+
+                    if showMenuConfirm {
+                        MenuConfirmation(
+                            input: input,
+                            palette: palette,
+                            onConfirm: {
+                                showMenuConfirm = false
+                                phase = .menu
+                            },
+                            onCancel: {
+                                showMenuConfirm = false
+                            }
+                        )
                     }
+                }
+                .onChange(of: input.menuPressed) { _, pressed in
+                    guard powerOn, pressed else { return }
+                    // Toggle dialog visibility on each MENU press.
+                    showMenuConfirm.toggle()
+                }
             }
         }
     }

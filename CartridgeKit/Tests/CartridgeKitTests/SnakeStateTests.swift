@@ -1,5 +1,5 @@
 import Testing
-@testable import GameBoyKit
+@testable import CartridgeKit
 
 @MainActor
 struct SnakeStateTests {

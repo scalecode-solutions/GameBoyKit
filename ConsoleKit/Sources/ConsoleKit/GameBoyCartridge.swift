@@ -1,4 +1,5 @@
 import SwiftUI
+import GameBoyKit
 
 /// A "cartridge" represents one game that can be loaded into the
 /// console. It's a value type holding metadata for the menu plus a

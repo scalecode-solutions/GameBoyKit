@@ -8,6 +8,10 @@ public enum GameBoyButton: String, CaseIterable, Sendable, Hashable {
     case dpadUp, dpadDown, dpadLeft, dpadRight
     case a, b
     case start, select
+    /// "Mod" button on the top-right of the chassis. Hardware-level
+    /// signal only — what it *does* (e.g. open the return-to-shelf
+    /// dialog) is owned by whatever's running in the screen slot.
+    case menu
 }
 
 /// Edge-triggered event delivered via `GameBoyInput.events`. Use for

@@ -37,6 +37,7 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
     private let bLabel: String
     private let startLabel: String
     private let selectLabel: String
+    private let menuLabel: String
     private let palette: GameBoyPaletteSet
     private let theme: GameBoyTheme
     @Binding private var powerOn: Bool
@@ -55,6 +56,7 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         bLabel: String = "B",
         startLabel: String  = "START",
         selectLabel: String = "SELECT",
+        menuLabel: String = "MENU",
         powerOn: Binding<Bool> = .constant(true),
         palette: GameBoyPaletteSet = .dmgMeetsColor,
         theme: GameBoyTheme = .system
@@ -67,6 +69,7 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         self.bLabel = bLabel
         self.startLabel = startLabel
         self.selectLabel = selectLabel
+        self.menuLabel = menuLabel
         self._powerOn = powerOn
         self.palette = palette
         self.theme = theme
@@ -100,12 +103,13 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
 
     private func content(palette: GameBoyPalette) -> some View {
         VStack(spacing: 0) {
-            // Top row: DMG-style power slider on the left, balanced
-            // empty space on the right. Lives on the chassis itself
-            // so the device is fully self-contained.
+            // Top row: DMG-style power slider on the left, MENU button
+            // mod on the right. Lives on the chassis itself so the
+            // device is fully self-contained.
             HStack(alignment: .center) {
                 PowerSwitch(isOn: $powerOn, palette: palette)
                 Spacer(minLength: 0)
+                MenuButton(input: input, palette: palette, label: menuLabel)
             }
             .padding(.bottom, 6)
 

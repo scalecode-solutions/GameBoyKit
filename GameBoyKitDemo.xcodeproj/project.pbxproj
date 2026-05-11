@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		BBBBBB0000000000000000A1 /* GameBoyKit in Frameworks */ = {isa = PBXBuildFile; productRef = BBBBBB0000000000000000A2 /* GameBoyKit */; };
+		CCCCCC0000000000000000A1 /* ConsoleKit in Frameworks */ = {isa = PBXBuildFile; productRef = CCCCCC0000000000000000A2 /* ConsoleKit */; };
+		DDDDDD0000000000000000A1 /* CartridgeKit in Frameworks */ = {isa = PBXBuildFile; productRef = DDDDDD0000000000000000A2 /* CartridgeKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,11 +27,11 @@
 /* Begin PBXFrameworksBuildPhase section */
 		AAAAAA0000000000000000D1 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 				BBBBBB0000000000000000A1 /* GameBoyKit in Frameworks */,
+				CCCCCC0000000000000000A1 /* ConsoleKit in Frameworks */,
+				DDDDDD0000000000000000A1 /* CartridgeKit in Frameworks */,
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -63,14 +65,14 @@
 			);
 			buildRules = (
 			);
-			dependencies = (
-			);
 			fileSystemSynchronizedGroups = (
 				AAAAAA0000000000000000C1 /* GameBoyKitDemo */,
 			);
 			name = GameBoyKitDemo;
 			packageProductDependencies = (
 				BBBBBB0000000000000000A2 /* GameBoyKit */,
+				CCCCCC0000000000000000A2 /* ConsoleKit */,
+				DDDDDD0000000000000000A2 /* CartridgeKit */,
 			);
 			productName = GameBoyKitDemo;
 			productReference = AAAAAA0000000000000000B1 /* GameBoyKitDemo.app */;
@@ -101,6 +103,8 @@
 			mainGroup = AAAAAA0000000000000000E1;
 			packageReferences = (
 				BBBBBB0000000000000000B1 /* XCLocalSwiftPackageReference "GameBoyKit" */,
+				CCCCCC0000000000000000B1 /* XCLocalSwiftPackageReference "ConsoleKit" */,
+				DDDDDD0000000000000000B1 /* XCLocalSwiftPackageReference "CartridgeKit" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = AAAAAA0000000000000000E2 /* Products */;
@@ -115,25 +119,21 @@
 /* Begin PBXResourcesBuildPhase section */
 		AAAAAA0000000000000000D3 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AAAAAA0000000000000000D2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
 			files = (
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		AAAAAA000000000000000101 /* Debug */ = {
+		AAAAAA000000000000000101 /* Debug configuration for PBXProject "GameBoyKitDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -197,7 +197,7 @@
 			};
 			name = Debug;
 		};
-		AAAAAA000000000000000102 /* Release */ = {
+		AAAAAA000000000000000102 /* Release configuration for PBXProject "GameBoyKitDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -254,13 +254,14 @@
 			};
 			name = Release;
 		};
-		AAAAAA000000000000000103 /* Debug */ = {
+		AAAAAA000000000000000103 /* Debug configuration for PBXNativeTarget "GameBoyKitDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YBFJUNLFT6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "GameBoyKit Demo";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
@@ -275,7 +276,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.travis.GameBoyKitDemo";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.travis.GameBoyKitDemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -287,13 +288,14 @@
 			};
 			name = Debug;
 		};
-		AAAAAA000000000000000104 /* Release */ = {
+		AAAAAA000000000000000104 /* Release configuration for PBXNativeTarget "GameBoyKitDemo" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = YBFJUNLFT6;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "GameBoyKit Demo";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.games";
@@ -308,7 +310,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = "dev.travis.GameBoyKitDemo";
+				PRODUCT_BUNDLE_IDENTIFIER = dev.travis.GameBoyKitDemo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -326,19 +328,17 @@
 		AAAAAA000000000000000100 /* Build configuration list for PBXProject "GameBoyKitDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				AAAAAA000000000000000101 /* Debug */,
-				AAAAAA000000000000000102 /* Release */,
+				AAAAAA000000000000000101 /* Debug configuration for PBXProject "GameBoyKitDemo" */,
+				AAAAAA000000000000000102 /* Release configuration for PBXProject "GameBoyKitDemo" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		AAAAAA00000000000000010A /* Build configuration list for PBXNativeTarget "GameBoyKitDemo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				AAAAAA000000000000000103 /* Debug */,
-				AAAAAA000000000000000104 /* Release */,
+				AAAAAA000000000000000103 /* Debug configuration for PBXNativeTarget "GameBoyKitDemo" */,
+				AAAAAA000000000000000104 /* Release configuration for PBXNativeTarget "GameBoyKitDemo" */,
 			);
-			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
@@ -348,6 +348,14 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = GameBoyKit;
 		};
+		CCCCCC0000000000000000B1 /* XCLocalSwiftPackageReference "ConsoleKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ConsoleKit;
+		};
+		DDDDDD0000000000000000B1 /* XCLocalSwiftPackageReference "CartridgeKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = CartridgeKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -355,6 +363,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = BBBBBB0000000000000000B1 /* XCLocalSwiftPackageReference "GameBoyKit" */;
 			productName = GameBoyKit;
+		};
+		CCCCCC0000000000000000A2 /* ConsoleKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CCCCCC0000000000000000B1 /* XCLocalSwiftPackageReference "ConsoleKit" */;
+			productName = ConsoleKit;
+		};
+		DDDDDD0000000000000000A2 /* CartridgeKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = DDDDDD0000000000000000B1 /* XCLocalSwiftPackageReference "CartridgeKit" */;
+			productName = CartridgeKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

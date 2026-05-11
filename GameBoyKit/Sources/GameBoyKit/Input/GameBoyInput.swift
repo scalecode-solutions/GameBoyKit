@@ -20,6 +20,7 @@ public final class GameBoyInput {
     public internal(set) var bPressed: Bool = false
     public internal(set) var startPressed: Bool = false
     public internal(set) var selectPressed: Bool = false
+    public internal(set) var menuPressed: Bool = false
 
     // MARK: - Event stream
 
@@ -57,6 +58,7 @@ public final class GameBoyInput {
         case .b:         return bPressed
         case .start:     return startPressed
         case .select:    return selectPressed
+        case .menu:      return menuPressed
         }
     }
 
@@ -77,6 +79,7 @@ public final class GameBoyInput {
         case .b:      guard bPressed      != pressed else { return }; bPressed      = pressed
         case .start:  guard startPressed  != pressed else { return }; startPressed  = pressed
         case .select: guard selectPressed != pressed else { return }; selectPressed = pressed
+        case .menu:   guard menuPressed   != pressed else { return }; menuPressed   = pressed
         case .dpadUp, .dpadDown, .dpadLeft, .dpadRight:
             // D-pad axes can't be set independently; use `setDPad`.
             return

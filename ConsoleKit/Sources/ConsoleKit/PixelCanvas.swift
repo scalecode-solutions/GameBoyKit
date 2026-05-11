@@ -1,4 +1,5 @@
 import SwiftUI
+import GameBoyKit
 
 /// The logical resolution of the in-LCD pixel grid. 160×120 keeps the
 /// horizontal density of the original Game Boy (160) while fitting our
