@@ -15,7 +15,12 @@ internal struct ScreenView<Screen: View, Subtitle: View>: View {
             // This matches the real DMG layout where the LED sits in the
             // bezel itself, below the screen, freeing the LCD to use the
             // full width of the bezel.
-            ZStack(alignment: .bottomLeading) {
+            // ZStack uses default (center) alignment so the LCD is
+            // centered horizontally in the bezel — preventing the
+            // asymmetric left/right padding we'd get if the LCD
+            // ever ended up narrower than the bezel. The POWER
+            // corner overrides its own alignment to bottom-leading.
+            ZStack {
                 bezel
                 lcd
                     .padding(.horizontal, 14)
@@ -24,6 +29,7 @@ internal struct ScreenView<Screen: View, Subtitle: View>: View {
                 powerCorner
                     .padding(.leading, 18)
                     .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
             }
 
             // Italic subtitle below ("DOT MATRIX WITH STEREO SOUND")
@@ -88,10 +94,11 @@ internal struct ScreenView<Screen: View, Subtitle: View>: View {
                 .opacity(isPowered ? 1 : 0.0)
                 .animation(.easeInOut(duration: 0.25), value: isPowered)
         }
-        // Native Game Boy was 10:9, but the bezel reads better when the
-        // LCD leans wider — closer to 4:3 — and the consumer's content
-        // doesn't care about exact resolution since this is a mockup.
-        .aspectRatio(4.0/3.0, contentMode: .fit)
+        // 16:9 — modern widescreen. Wider than the original DMG's 10:9
+        // but it reads as a contemporary handheld and dodges the
+        // "LCD gets height-constrained → asymmetric bezel" issue that
+        // a near-square aspect can produce on tight chassis layouts.
+        .aspectRatio(16.0/9.0, contentMode: .fit)
         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 4, style: .continuous)

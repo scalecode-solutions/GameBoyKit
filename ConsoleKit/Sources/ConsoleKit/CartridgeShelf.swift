@@ -86,32 +86,32 @@ public struct CartridgeShelf: View {
         PixelCanvas { ctx, scale in
             // Solid background (the LCD already paints lcdBackground;
             // we draw shade0 over it to commit to our 4-shade palette).
-            ctx.fillPixel(x: 0, y: 0, width: 160, height: 120,
+            ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                           color: palette.lcdShade0, scale: scale)
 
-            // Title card border
-            ctx.fillPixel(x: 0, y: 0, width: 160, height: 8, color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: 0, y: 112, width: 160, height: 8, color: palette.lcdShade3, scale: scale)
+            // Title card borders (top + bottom strips)
+            ctx.fillPixel(x: 0, y: 0,   width: 256, height: 8, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: 0, y: 136, width: 256, height: 8, color: palette.lcdShade3, scale: scale)
 
             // "GAMEBOYKIT" centered
             ctx.draw(
                 Text("GAMEBOYKIT")
-                    .font(.system(size: 16 * scale.height,
+                    .font(.system(size: 18 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: 80 * scale.width, y: 56 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 64 * scale.height),
                 anchor: .center
             )
 
             // Subtitle
             ctx.draw(
                 Text("INSERT CARTRIDGE")
-                    .font(.system(size: 8 * scale.height,
+                    .font(.system(size: 9 * scale.height,
                                   weight: .bold,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade2),
-                at: CGPoint(x: 80 * scale.width, y: 78 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 88 * scale.height),
                 anchor: .center
             )
         }
@@ -126,41 +126,42 @@ public struct CartridgeShelf: View {
     private var menuView: some View {
         PixelCanvas { ctx, scale in
             // Background
-            ctx.fillPixel(x: 0, y: 0, width: 160, height: 120,
+            ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                           color: palette.lcdShade0, scale: scale)
 
             // Title bar
-            ctx.fillPixel(x: 0, y: 0, width: 160, height: 14,
+            ctx.fillPixel(x: 0, y: 0, width: 256, height: 16,
                           color: palette.lcdShade3, scale: scale)
             ctx.draw(
                 Text("CARTRIDGES")
-                    .font(.system(size: 10 * scale.height,
+                    .font(.system(size: 11 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade0),
-                at: CGPoint(x: 80 * scale.width, y: 7 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 8 * scale.height),
                 anchor: .center
             )
 
             // List
-            let rowHeight = 14
+            let rowHeight = 16
+            let listStartY = 26
             for (i, cart) in cartridges.enumerated() {
-                let yTop = 20 + i * rowHeight
+                let yTop = listStartY + i * rowHeight
                 let isSelected = i == selectedIndex
                 if isSelected {
-                    ctx.fillPixel(x: 4, y: yTop - 2, width: 152, height: rowHeight - 2,
+                    ctx.fillPixel(x: 8, y: yTop - 2, width: 240, height: rowHeight - 2,
                                   color: palette.lcdShade2, scale: scale)
                     // Triangle pointer (▶)
-                    ctx.fillPixel(x: 8, y: yTop + 2, width: 2, height: 4, color: palette.lcdShade0, scale: scale)
-                    ctx.fillPixel(x: 10, y: yTop + 3, width: 1, height: 2, color: palette.lcdShade0, scale: scale)
+                    ctx.fillPixel(x: 14, y: yTop + 2, width: 2, height: 6, color: palette.lcdShade0, scale: scale)
+                    ctx.fillPixel(x: 16, y: yTop + 4, width: 1, height: 2, color: palette.lcdShade0, scale: scale)
                 }
                 ctx.draw(
                     Text(cart.title)
-                        .font(.system(size: 9 * scale.height,
+                        .font(.system(size: 10 * scale.height,
                                       weight: .heavy,
                                       design: .monospaced))
                         .foregroundColor(isSelected ? palette.lcdShade0 : palette.lcdShade3),
-                    at: CGPoint(x: 16 * scale.width, y: CGFloat(yTop + 4) * scale.height),
+                    at: CGPoint(x: 24 * scale.width, y: CGFloat(yTop + 5) * scale.height),
                     anchor: .leading
                 )
             }
@@ -169,15 +170,15 @@ public struct CartridgeShelf: View {
             if cartridges.indices.contains(selectedIndex) {
                 let cart = cartridges[selectedIndex]
                 if !cart.blurb.isEmpty {
-                    ctx.fillPixel(x: 0, y: 106, width: 160, height: 14,
+                    ctx.fillPixel(x: 0, y: 128, width: 256, height: 16,
                                   color: palette.lcdShade1, scale: scale)
                     ctx.draw(
                         Text(cart.blurb)
-                            .font(.system(size: 8 * scale.height,
+                            .font(.system(size: 9 * scale.height,
                                           weight: .semibold,
                                           design: .monospaced))
                             .foregroundColor(palette.lcdShade3),
-                        at: CGPoint(x: 80 * scale.width, y: 113 * scale.height),
+                        at: CGPoint(x: 128 * scale.width, y: 136 * scale.height),
                         anchor: .center
                     )
                 }

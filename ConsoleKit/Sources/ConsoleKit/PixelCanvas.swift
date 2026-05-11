@@ -1,12 +1,12 @@
 import SwiftUI
 import GameBoyKit
 
-/// The logical resolution of the in-LCD pixel grid. 160×120 keeps the
-/// horizontal density of the original Game Boy (160) while fitting our
-/// wider 4:3 bezel.
+/// The logical resolution of the in-LCD pixel grid. 256×144 is true
+/// 16:9 with both dimensions cleanly divisible by 8, so games using
+/// 8×8 cells get a tidy 32×18 grid.
 public enum PixelGrid {
-    public static let width:  Int = 160
-    public static let height: Int = 120
+    public static let width:  Int = 256
+    public static let height: Int = 144
     public static let size = CGSize(width: width, height: height)
 }
 

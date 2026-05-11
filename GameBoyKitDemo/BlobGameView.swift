@@ -22,33 +22,33 @@ private struct ComingSoonView: View {
 
     var body: some View {
         PixelCanvas { ctx, scale in
-            ctx.fillPixel(x: 0, y: 0, width: 160, height: 120,
+            ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                           color: palette.lcdShade0, scale: scale)
             ctx.draw(
                 Text(title)
-                    .font(.system(size: 16 * scale.height,
+                    .font(.system(size: 18 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: 80 * scale.width, y: 50 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 60 * scale.height),
                 anchor: .center
             )
             ctx.draw(
                 Text("COMING SOON")
-                    .font(.system(size: 10 * scale.height,
+                    .font(.system(size: 11 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade2),
-                at: CGPoint(x: 80 * scale.width, y: 68 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 82 * scale.height),
                 anchor: .center
             )
             ctx.draw(
-                Text("START: MENU")
-                    .font(.system(size: 8 * scale.height,
+                Text("MENU: BACK")
+                    .font(.system(size: 9 * scale.height,
                                   weight: .bold,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade2),
-                at: CGPoint(x: 80 * scale.width, y: 100 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 120 * scale.height),
                 anchor: .center
             )
         }

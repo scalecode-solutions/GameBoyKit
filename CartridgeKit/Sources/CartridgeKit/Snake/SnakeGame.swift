@@ -79,13 +79,13 @@ public struct SnakeGame: View {
 
     private func render(into ctx: inout GraphicsContext, scale: CGSize) {
         // Background
-        ctx.fillPixel(x: 0, y: 0, width: 160, height: 120,
+        ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                       color: palette.lcdShade0, scale: scale)
 
         // HUD bar (top 24 px = 3 cells)
-        ctx.fillPixel(x: 0, y: 0, width: 160, height: 23,
+        ctx.fillPixel(x: 0, y: 0, width: 256, height: 23,
                       color: palette.lcdShade1, scale: scale)
-        ctx.fillPixel(x: 0, y: 23, width: 160, height: 1,
+        ctx.fillPixel(x: 0, y: 23, width: 256, height: 1,
                       color: palette.lcdShade3, scale: scale)
 
         // SCORE
@@ -108,7 +108,7 @@ public struct SnakeGame: View {
             }
         }()
         for dx in [0, 4, 8] {
-            ctx.fillPixel(x: 138 + dx, y: 9, width: 3, height: 3,
+            ctx.fillPixel(x: 234 + dx, y: 9, width: 3, height: 3,
                           color: indicatorColor, scale: scale)
         }
 
@@ -143,33 +143,34 @@ public struct SnakeGame: View {
         title: String,
         subtitle: String
     ) {
-        // Dim the playfield
-        ctx.fillPixel(x: 0, y: 24, width: 160, height: 96,
+        // Dim the playfield (rows 3-17, y=24…143)
+        ctx.fillPixel(x: 0, y: 24, width: 256, height: 120,
                       color: palette.lcdShade3.opacity(0.55), scale: scale)
-        // Banner box
-        ctx.fillPixel(x: 16, y: 50, width: 128, height: 36,
+        // Banner box centered horizontally
+        let boxX = 48, boxY = 58, boxW = 160, boxH = 40
+        ctx.fillPixel(x: boxX, y: boxY, width: boxW, height: boxH,
                       color: palette.lcdShade0, scale: scale)
-        ctx.fillPixel(x: 16, y: 50, width: 128, height: 1,
+        ctx.fillPixel(x: boxX, y: boxY,                width: boxW, height: 1,
                       color: palette.lcdShade3, scale: scale)
-        ctx.fillPixel(x: 16, y: 85, width: 128, height: 1,
+        ctx.fillPixel(x: boxX, y: boxY + boxH - 1,     width: boxW, height: 1,
                       color: palette.lcdShade3, scale: scale)
 
         ctx.draw(
             Text(title)
-                .font(.system(size: 14 * scale.height,
+                .font(.system(size: 15 * scale.height,
                               weight: .black,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade3),
-            at: CGPoint(x: 80 * scale.width, y: 62 * scale.height),
+            at: CGPoint(x: 128 * scale.width, y: 72 * scale.height),
             anchor: .center
         )
         ctx.draw(
             Text(subtitle)
-                .font(.system(size: 8 * scale.height,
+                .font(.system(size: 9 * scale.height,
                               weight: .heavy,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade2),
-            at: CGPoint(x: 80 * scale.width, y: 78 * scale.height),
+            at: CGPoint(x: 128 * scale.width, y: 88 * scale.height),
             anchor: .center
         )
     }

@@ -11,8 +11,9 @@ public final class SnakeState {
 
     // MARK: - Geometry
 
-    public static let cols          = 20
-    public static let rows          = 15
+    // 256×144 logical LCD with 8×8 cells → 32 cols × 18 rows.
+    public static let cols          = 32
+    public static let rows          = 18
     public static let hudRows       = 3            // 0..<3 reserved
     public static var playRowStart: Int { hudRows }
     public static var playRowEnd:   Int { rows }   // exclusive

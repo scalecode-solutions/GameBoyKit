@@ -20,14 +20,14 @@ internal struct MenuConfirmation: View {
     var body: some View {
         PixelCanvas { ctx, scale in
             // Dim the game behind by painting a translucent shade3.
-            ctx.fillPixel(x: 0, y: 0, width: 160, height: 120,
+            ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                           color: palette.lcdShade3.opacity(0.65), scale: scale)
 
             // Dialog box
-            let boxX = 14, boxY = 28, boxW = 132, boxH = 64
+            let boxX = 32, boxY = 36, boxW = 192, boxH = 72
             ctx.fillPixel(x: boxX, y: boxY, width: boxW, height: boxH,
                           color: palette.lcdShade0, scale: scale)
-            // Border (1-pixel double frame for that retro UI look)
+            // Border (1-pixel frame)
             ctx.fillPixel(x: boxX, y: boxY, width: boxW, height: 1,
                           color: palette.lcdShade3, scale: scale)
             ctx.fillPixel(x: boxX, y: boxY + boxH - 1, width: boxW, height: 1,
@@ -40,30 +40,29 @@ internal struct MenuConfirmation: View {
             // Title
             ctx.draw(
                 Text("RETURN TO LIBRARY?")
-                    .font(.system(size: 11 * scale.height,
+                    .font(.system(size: 12 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: 80 * scale.width, y: 44 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 54 * scale.height),
                 anchor: .center
             )
 
             // YES / NO row
-            let row = 64
-            // YES at x≈54, NO at x≈106 — both 8 chars wide visually
+            let row = 80
             drawOption(into: &ctx, scale: scale,
-                       label: "YES", centerX: 54, y: row, isSelected: selection == .yes)
+                       label: "YES", centerX: 96,  y: row, isSelected: selection == .yes)
             drawOption(into: &ctx, scale: scale,
-                       label: "NO",  centerX: 106, y: row, isSelected: selection == .no)
+                       label: "NO",  centerX: 160, y: row, isSelected: selection == .no)
 
             // Controls hint
             ctx.draw(
                 Text("◁▷ PICK   A: OK   B: CANCEL")
-                    .font(.system(size: 7 * scale.height,
+                    .font(.system(size: 8 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade2),
-                at: CGPoint(x: 80 * scale.width, y: 83 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 100 * scale.height),
                 anchor: .center
             )
         }
