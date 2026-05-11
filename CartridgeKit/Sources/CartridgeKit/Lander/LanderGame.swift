@@ -261,21 +261,19 @@ public struct LanderGame: View {
                           color: palette.lcdShade1, scale: scale)
         }
 
-        // Alignment beam: when the *landing element* (ship in Classic,
-        // cargo in Pendulum) is horizontally over the pad, draw a
-        // faint vertical column up from the pad surface to the HUD
-        // baseline. Communicates "you're lined up, now just slow
-        // down" without overwhelming the screen.
+        // Alignment beam: when the *landing element* (ship in Classic
+        // and Mail Run, cargo in Pendulum) is horizontally over the
+        // CURRENT TARGET PAD, draw a faint vertical column up from
+        // the pad surface to the HUD baseline.
         let alignTargetX: Double = (state.mode == .pendulum) ? state.cargoX : state.shipX
-        let aligned = alignTargetX >= Double(LanderState.padLeft)
-                   && alignTargetX <= Double(LanderState.padRight)
+        let target = state.currentTargetPad
+        let aligned = alignTargetX >= Double(target.left)
+                   && alignTargetX <= Double(target.right)
         if aligned {
-            let beamX = LanderState.padLeft
-            let beamW = LanderState.padWidth
             let beamY = LanderState.hudHeight
-            let beamH = LanderState.padTop - LanderState.hudHeight
-            ctx.fillPixel(x: beamX, y: beamY,
-                          width: beamW, height: beamH,
+            let beamH = target.top - LanderState.hudHeight
+            ctx.fillPixel(x: target.left, y: beamY,
+                          width: target.width, height: beamH,
                           color: palette.lcdShade1.opacity(0.45),
                           scale: scale)
         }
@@ -290,27 +288,20 @@ public struct LanderGame: View {
                       width: LanderState.lcdWidth, height: 1,
                       color: palette.lcdShade3, scale: scale)
 
-        // Pad legs (vertical posts under the pad surface)
-        ctx.fillPixel(x: LanderState.padLeft + 2, y: LanderState.padTop + 2,
-                      width: 2, height: LanderState.groundY - (LanderState.padTop + 2),
-                      color: palette.lcdShade3, scale: scale)
-        ctx.fillPixel(x: LanderState.padRight - 4, y: LanderState.padTop + 2,
-                      width: 2, height: LanderState.groundY - (LanderState.padTop + 2),
-                      color: palette.lcdShade3, scale: scale)
-
-        // Pad surface (slightly raised platform). When the ship is
-        // aligned over the pad, brighten the markings into a 2px
-        // band — reinforces the alignment cue at the pad itself.
-        ctx.fillPixel(x: LanderState.padLeft, y: LanderState.padTop,
-                      width: LanderState.padWidth, height: 2,
-                      color: palette.lcdShade3, scale: scale)
-        let markY = aligned ? LanderState.padTop - 2 : LanderState.padTop - 1
-        let markH = aligned ? 2 : 1
-        for dx in stride(from: 2, to: LanderState.padWidth - 2, by: 4) {
-            ctx.fillPixel(x: LanderState.padLeft + dx,
-                          y: markY,
-                          width: 2, height: markH,
-                          color: palette.lcdShade3, scale: scale)
+        // Pads — iterate the per-mode pads array so multi-pad modes
+        // (Mail Run) get all their pads drawn. Mark cleared pads dim,
+        // the current target with a number badge + brighter markings.
+        for (i, pad) in state.pads.enumerated() {
+            let isTarget  = (i == state.mailRunIndex)
+            let isCleared = state.mailRunCleared.indices.contains(i)
+                         && state.mailRunCleared[i]
+            drawPad(into: &ctx, scale: scale,
+                    pad: pad,
+                    isTarget: isTarget,
+                    isCleared: isCleared,
+                    alignedToTarget: aligned && isTarget,
+                    showBadge: state.mode == .mailRun,
+                    badgeIndex: i + 1)
         }
 
         // Pendulum tether + cargo — drawn before the ship so the ship
@@ -384,6 +375,86 @@ public struct LanderGame: View {
         }
     }
 
+    /// Draws a single landing pad — legs, surface, tick marks, and
+    /// (when in Mail Run) a number badge above the pad. Cleared pads
+    /// render dimmer; the current target pad's tick marks fatten when
+    /// the player is aligned over it (the alignment cue).
+    private func drawPad(
+        into ctx: inout GraphicsContext,
+        scale: CGSize,
+        pad: LanderState.Pad,
+        isTarget: Bool,
+        isCleared: Bool,
+        alignedToTarget: Bool,
+        showBadge: Bool,
+        badgeIndex: Int
+    ) {
+        let bodyColor: Color = isCleared ? palette.lcdShade2 : palette.lcdShade3
+
+        // Legs
+        ctx.fillPixel(x: pad.left + 2, y: pad.top + 2,
+                      width: 2, height: LanderState.groundY - (pad.top + 2),
+                      color: bodyColor, scale: scale)
+        ctx.fillPixel(x: pad.right - 4, y: pad.top + 2,
+                      width: 2, height: LanderState.groundY - (pad.top + 2),
+                      color: bodyColor, scale: scale)
+
+        // Surface
+        ctx.fillPixel(x: pad.left, y: pad.top,
+                      width: pad.width, height: 2,
+                      color: bodyColor, scale: scale)
+
+        // Tick marks above the surface — fatten when aligned to target
+        let markY = alignedToTarget ? pad.top - 2 : pad.top - 1
+        let markH = alignedToTarget ? 2 : 1
+        for dx in stride(from: 2, to: pad.width - 2, by: 4) {
+            ctx.fillPixel(x: pad.left + dx, y: markY,
+                          width: 2, height: markH,
+                          color: bodyColor, scale: scale)
+        }
+
+        // Mail Run badge: render a small numbered label above the pad
+        // so the player can see which one is target #1, #2, etc., and
+        // a checkmark-style filled dot on cleared pads.
+        if showBadge {
+            let badgeY = pad.top - 12
+            let badgeX = (pad.left + pad.right) / 2
+            if isCleared {
+                // Cleared: small filled circle / dot
+                ctx.fillPixel(x: badgeX - 2, y: badgeY, width: 5, height: 5,
+                              color: palette.lcdShade2, scale: scale)
+                ctx.fillPixel(x: badgeX - 1, y: badgeY + 1, width: 3, height: 3,
+                              color: palette.lcdShade3, scale: scale)
+            } else if isTarget {
+                // Target: number, animated dim/bright pulse so it's eye-catching
+                let pulse = (animTick / 12) % 2 == 0
+                let badgeColor = pulse ? palette.lcdShade3 : palette.lcdShade2
+                ctx.draw(
+                    Text("\(badgeIndex)")
+                        .font(.system(size: 11 * scale.height,
+                                      weight: .black,
+                                      design: .monospaced))
+                        .foregroundColor(badgeColor),
+                    at: CGPoint(x: CGFloat(badgeX) * scale.width,
+                                y: CGFloat(badgeY + 4) * scale.height),
+                    anchor: .center
+                )
+            } else {
+                // Future target: dim numeric label
+                ctx.draw(
+                    Text("\(badgeIndex)")
+                        .font(.system(size: 9 * scale.height,
+                                      weight: .heavy,
+                                      design: .monospaced))
+                        .foregroundColor(palette.lcdShade1),
+                    at: CGPoint(x: CGFloat(badgeX) * scale.width,
+                                y: CGFloat(badgeY + 4) * scale.height),
+                    anchor: .center
+                )
+            }
+        }
+    }
+
     private func drawShip(into ctx: inout GraphicsContext, scale: CGSize) {
         let sx = Int(state.shipX.rounded())
         let sy = Int(state.shipY.rounded())
@@ -431,12 +502,15 @@ public struct LanderGame: View {
     }
 
     private func drawHUD(into ctx: inout GraphicsContext, scale: CGSize) {
-        // HUD background strip
+        // Mail Run needs more HUD real estate (timer + progress) so we
+        // grow the strip to 28px tall for that mode; other modes keep
+        // the slim 18px strip.
+        let strip = state.mode == .mailRun ? 28 : LanderState.hudHeight
         ctx.fillPixel(x: 0, y: 0,
                       width: LanderState.lcdWidth,
-                      height: LanderState.hudHeight,
+                      height: strip,
                       color: palette.lcdShade1, scale: scale)
-        ctx.fillPixel(x: 0, y: LanderState.hudHeight - 1,
+        ctx.fillPixel(x: 0, y: strip - 1,
                       width: LanderState.lcdWidth, height: 1,
                       color: palette.lcdShade3, scale: scale)
 
@@ -508,6 +582,38 @@ public struct LanderGame: View {
                 at: CGPoint(x: CGFloat(badgeX + badgeW / 2) * scale.width,
                             y: CGFloat(badgeY + badgeH / 2) * scale.height),
                 anchor: .center
+            )
+        }
+
+        // Mail Run: second HUD row with timer (left) and pads-delivered
+        // counter (right). Timer flashes red in the final 5 seconds.
+        if state.mode == .mailRun {
+            let secondsLeft = max(0, state.timeRemainingTicks / 60)
+            let lowTime = secondsLeft <= 5
+            let timeColor: Color = {
+                if !lowTime { return palette.lcdShade3 }
+                return ((animTick / 8) % 2 == 0) ? palette.lcdShade3 : palette.lcdShade1
+            }()
+            ctx.draw(
+                Text(String(format: "TIME %02d", secondsLeft))
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(timeColor),
+                at: CGPoint(x: 4 * scale.width, y: 22 * scale.height),
+                anchor: .leading
+            )
+
+            let cleared = state.mailRunCleared.filter { $0 }.count
+            let total   = state.pads.count
+            ctx.draw(
+                Text("DELIVERED \(cleared)/\(total)")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 252 * scale.width, y: 22 * scale.height),
+                anchor: .trailing
             )
         }
     }
