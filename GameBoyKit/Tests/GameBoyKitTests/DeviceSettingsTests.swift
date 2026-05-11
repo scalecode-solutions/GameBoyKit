@@ -22,22 +22,34 @@ struct DeviceSettingsTests {
     }
 
     @Test func paletteSetExposesBuiltInIDAndDisplayName() {
-        #expect(GameBoyPaletteSet.dmgMeetsColor.builtInID == "dmgMeetsColor")
-        #expect(GameBoyPaletteSet.classicDMG.builtInID    == "classicDMG")
-        #expect(GameBoyPaletteSet.atomicRed.builtInID     == "atomicRed")
-        #expect(GameBoyPaletteSet.oceanBlue.builtInID     == "oceanBlue")
-        #expect(GameBoyPaletteSet.dmgMeetsColor.displayName == "BERRY")
-        #expect(GameBoyPaletteSet.classicDMG.displayName    == "STONE")
-        #expect(GameBoyPaletteSet.atomicRed.displayName     == "ATOMIC")
-        #expect(GameBoyPaletteSet.oceanBlue.displayName     == "OCEAN")
+        let expectedNames: [(GameBoyPaletteSet, String, String)] = [
+            (.dmgMeetsColor, "dmgMeetsColor", "BERRY"),
+            (.classicDMG,    "classicDMG",    "STONE"),
+            (.atomicRed,     "atomicRed",     "ATOMIC"),
+            (.oceanBlue,     "oceanBlue",     "OCEAN"),
+            (.mint,          "mint",          "MINT"),
+            (.pink,          "pink",          "PINK"),
+            (.yellow,        "yellow",        "YELLOW"),
+            (.orange,        "orange",        "ORANGE"),
+            (.purple,        "purple",        "PURPLE"),
+            (.black,         "black",         "BLACK")
+        ]
+        for (set, id, name) in expectedNames {
+            #expect(set.builtInID  == id,   "id mismatch for \(name)")
+            #expect(set.displayName == name, "name mismatch for \(id)")
+        }
     }
 
     @Test func builtInLookupRoundTripsByID() {
-        #expect(GameBoyPaletteSet.builtIn(id: "dmgMeetsColor") == .dmgMeetsColor)
-        #expect(GameBoyPaletteSet.builtIn(id: "classicDMG")    == .classicDMG)
-        #expect(GameBoyPaletteSet.builtIn(id: "atomicRed")     == .atomicRed)
-        #expect(GameBoyPaletteSet.builtIn(id: "oceanBlue")     == .oceanBlue)
-        #expect(GameBoyPaletteSet.builtIn(id: "nonsense")      == nil)
+        for entry in GameBoyPaletteSet.builtIns {
+            #expect(GameBoyPaletteSet.builtIn(id: entry.id) == entry.set,
+                    "lookup failed for \(entry.id)")
+        }
+        #expect(GameBoyPaletteSet.builtIn(id: "nonsense") == nil)
+    }
+
+    @Test func tenBuiltInColors() {
+        #expect(GameBoyPaletteSet.builtIns.count == 10)
     }
 
     @Test func themePersistsRoundTrip() {

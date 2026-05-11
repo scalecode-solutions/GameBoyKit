@@ -410,6 +410,488 @@ public extension GameBoyPalette {
         speakerGrilleColor:    Color(red: 0.34, green: 0.40, blue: 0.50)
     )
 
+    /// "Mint" — pastel mint-green shell, dark forest bezel, magenta
+    /// A/B for that watermelon-rind contrast.
+    static let mintLight = GameBoyPalette(
+        shellTop:              Color(red: 0.62, green: 0.92, blue: 0.78),
+        shellBottom:           Color(red: 0.50, green: 0.84, blue: 0.68),
+        shellEdgeHighlight:    Color.white.opacity(0.55),
+        shellEdgeShadow:       Color.black.opacity(0.18),
+
+        screenBezel:           Color(red: 0.08, green: 0.24, blue: 0.18),
+        screenBezelEdge:       Color(red: 0.04, green: 0.14, blue: 0.10),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 0.96, green: 0.45, blue: 0.55),
+        ledOff:                Color(red: 0.40, green: 0.16, blue: 0.20),
+        ledRing:               Color.black.opacity(0.45),
+
+        actionButton:          Color(red: 0.92, green: 0.38, blue: 0.62),
+        actionButtonHighlight: Color(red: 1.00, green: 0.65, blue: 0.82),
+        actionButtonShadow:    Color(red: 0.40, green: 0.08, blue: 0.22),
+        actionButtonLabel:     Color(red: 0.06, green: 0.20, blue: 0.14),
+
+        systemButton:          Color(red: 0.50, green: 0.58, blue: 0.52),
+        systemButtonHighlight: Color(red: 0.75, green: 0.82, blue: 0.78),
+        systemButtonLabel:     Color(red: 0.08, green: 0.22, blue: 0.16),
+
+        dpad:                  Color(red: 0.14, green: 0.18, blue: 0.16),
+        dpadHighlight:         Color(red: 0.32, green: 0.38, blue: 0.34),
+        dpadShadow:            Color.black.opacity(0.55),
+
+        headlineColor:         Color(red: 0.04, green: 0.20, blue: 0.14),
+        subtitleColor:         Color(red: 0.10, green: 0.30, blue: 0.22),
+        brandColor:            Color(red: 0.06, green: 0.24, blue: 0.18),
+        speakerGrilleColor:    Color(red: 0.42, green: 0.52, blue: 0.46)
+    )
+
+    /// "Pine" — deep forest-green chassis with bright pink A/B.
+    static let mintDark = GameBoyPalette(
+        shellTop:              Color(red: 0.10, green: 0.26, blue: 0.20),
+        shellBottom:           Color(red: 0.06, green: 0.16, blue: 0.12),
+        shellEdgeHighlight:    Color.white.opacity(0.12),
+        shellEdgeShadow:       Color.black.opacity(0.60),
+
+        screenBezel:           Color(red: 0.04, green: 0.10, blue: 0.08),
+        screenBezelEdge:       Color(red: 0.02, green: 0.06, blue: 0.04),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.50, blue: 0.60),
+        ledOff:                Color(red: 0.34, green: 0.14, blue: 0.20),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 1.00, green: 0.55, blue: 0.78),
+        actionButtonHighlight: Color(red: 1.00, green: 0.78, blue: 0.92),
+        actionButtonShadow:    Color(red: 0.30, green: 0.06, blue: 0.18),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.48, green: 0.54, blue: 0.50),
+        systemButtonHighlight: Color(red: 0.70, green: 0.76, blue: 0.72),
+        systemButtonLabel:     Color(red: 0.88, green: 0.94, blue: 0.90),
+
+        dpad:                  Color(red: 0.42, green: 0.46, blue: 0.44),
+        dpadHighlight:         Color(red: 0.60, green: 0.64, blue: 0.62),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 0.86, green: 0.96, blue: 0.90),
+        subtitleColor:         Color(red: 0.60, green: 0.80, blue: 0.72),
+        brandColor:            Color(red: 0.72, green: 0.88, blue: 0.80),
+        speakerGrilleColor:    Color(red: 0.36, green: 0.44, blue: 0.40)
+    )
+
+    /// "Bubblegum" — bright pink shell, dark berry bezel, mint A/B.
+    static let pinkLight = GameBoyPalette(
+        shellTop:              Color(red: 0.98, green: 0.78, blue: 0.86),
+        shellBottom:           Color(red: 0.94, green: 0.66, blue: 0.78),
+        shellEdgeHighlight:    Color.white.opacity(0.55),
+        shellEdgeShadow:       Color.black.opacity(0.18),
+
+        screenBezel:           Color(red: 0.36, green: 0.10, blue: 0.22),
+        screenBezelEdge:       Color(red: 0.20, green: 0.04, blue: 0.12),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 0.95, green: 0.20, blue: 0.40),
+        ledOff:                Color(red: 0.40, green: 0.08, blue: 0.16),
+        ledRing:               Color.black.opacity(0.45),
+
+        actionButton:          Color(red: 0.42, green: 0.78, blue: 0.62),
+        actionButtonHighlight: Color(red: 0.65, green: 0.92, blue: 0.80),
+        actionButtonShadow:    Color(red: 0.10, green: 0.32, blue: 0.22),
+        actionButtonLabel:     Color(red: 0.20, green: 0.06, blue: 0.14),
+
+        systemButton:          Color(red: 0.55, green: 0.50, blue: 0.54),
+        systemButtonHighlight: Color(red: 0.80, green: 0.76, blue: 0.78),
+        systemButtonLabel:     Color(red: 0.32, green: 0.08, blue: 0.20),
+
+        dpad:                  Color(red: 0.18, green: 0.16, blue: 0.18),
+        dpadHighlight:         Color(red: 0.36, green: 0.34, blue: 0.36),
+        dpadShadow:            Color.black.opacity(0.55),
+
+        headlineColor:         Color(red: 0.36, green: 0.08, blue: 0.22),
+        subtitleColor:         Color(red: 0.48, green: 0.16, blue: 0.32),
+        brandColor:            Color(red: 0.40, green: 0.10, blue: 0.26),
+        speakerGrilleColor:    Color(red: 0.55, green: 0.46, blue: 0.50)
+    )
+
+    /// "Plum" — deep berry-purple chassis with bright mint A/B.
+    static let pinkDark = GameBoyPalette(
+        shellTop:              Color(red: 0.28, green: 0.08, blue: 0.18),
+        shellBottom:           Color(red: 0.18, green: 0.04, blue: 0.12),
+        shellEdgeHighlight:    Color.white.opacity(0.12),
+        shellEdgeShadow:       Color.black.opacity(0.60),
+
+        screenBezel:           Color(red: 0.12, green: 0.02, blue: 0.08),
+        screenBezelEdge:       Color(red: 0.06, green: 0.01, blue: 0.04),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.32, blue: 0.50),
+        ledOff:                Color(red: 0.36, green: 0.10, blue: 0.18),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 0.62, green: 0.96, blue: 0.78),
+        actionButtonHighlight: Color(red: 0.82, green: 1.00, blue: 0.92),
+        actionButtonShadow:    Color(red: 0.10, green: 0.30, blue: 0.20),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.50, green: 0.46, blue: 0.52),
+        systemButtonHighlight: Color(red: 0.72, green: 0.68, blue: 0.74),
+        systemButtonLabel:     Color(red: 0.90, green: 0.84, blue: 0.92),
+
+        dpad:                  Color(red: 0.44, green: 0.42, blue: 0.46),
+        dpadHighlight:         Color(red: 0.62, green: 0.58, blue: 0.64),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 1.00, green: 0.90, blue: 0.95),
+        subtitleColor:         Color(red: 0.92, green: 0.75, blue: 0.85),
+        brandColor:            Color(red: 0.95, green: 0.82, blue: 0.90),
+        speakerGrilleColor:    Color(red: 0.42, green: 0.36, blue: 0.40)
+    )
+
+    /// "Sunny" — bright yellow shell, dark amber bezel, violet A/B.
+    static let yellowLight = GameBoyPalette(
+        shellTop:              Color(red: 0.98, green: 0.90, blue: 0.42),
+        shellBottom:           Color(red: 0.92, green: 0.80, blue: 0.28),
+        shellEdgeHighlight:    Color.white.opacity(0.55),
+        shellEdgeShadow:       Color.black.opacity(0.18),
+
+        screenBezel:           Color(red: 0.34, green: 0.24, blue: 0.04),
+        screenBezelEdge:       Color(red: 0.18, green: 0.12, blue: 0.02),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 0.92, green: 0.20, blue: 0.20),
+        ledOff:                Color(red: 0.40, green: 0.08, blue: 0.08),
+        ledRing:               Color.black.opacity(0.45),
+
+        actionButton:          Color(red: 0.46, green: 0.30, blue: 0.78),
+        actionButtonHighlight: Color(red: 0.70, green: 0.55, blue: 0.94),
+        actionButtonShadow:    Color(red: 0.18, green: 0.06, blue: 0.42),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.56, green: 0.52, blue: 0.46),
+        systemButtonHighlight: Color(red: 0.80, green: 0.76, blue: 0.70),
+        systemButtonLabel:     Color(red: 0.28, green: 0.20, blue: 0.06),
+
+        dpad:                  Color(red: 0.18, green: 0.16, blue: 0.14),
+        dpadHighlight:         Color(red: 0.36, green: 0.34, blue: 0.30),
+        dpadShadow:            Color.black.opacity(0.55),
+
+        headlineColor:         Color(red: 0.24, green: 0.16, blue: 0.04),
+        subtitleColor:         Color(red: 0.36, green: 0.26, blue: 0.08),
+        brandColor:            Color(red: 0.30, green: 0.20, blue: 0.06),
+        speakerGrilleColor:    Color(red: 0.55, green: 0.50, blue: 0.42)
+    )
+
+    /// "Mustard" — deep yellow chassis with bright violet A/B.
+    static let yellowDark = GameBoyPalette(
+        shellTop:              Color(red: 0.28, green: 0.22, blue: 0.06),
+        shellBottom:           Color(red: 0.18, green: 0.14, blue: 0.04),
+        shellEdgeHighlight:    Color.white.opacity(0.12),
+        shellEdgeShadow:       Color.black.opacity(0.60),
+
+        screenBezel:           Color(red: 0.12, green: 0.08, blue: 0.02),
+        screenBezelEdge:       Color(red: 0.06, green: 0.04, blue: 0.01),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.30, blue: 0.30),
+        ledOff:                Color(red: 0.30, green: 0.06, blue: 0.06),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 0.62, green: 0.48, blue: 0.96),
+        actionButtonHighlight: Color(red: 0.84, green: 0.74, blue: 1.00),
+        actionButtonShadow:    Color(red: 0.20, green: 0.08, blue: 0.42),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.50, green: 0.48, blue: 0.44),
+        systemButtonHighlight: Color(red: 0.72, green: 0.70, blue: 0.66),
+        systemButtonLabel:     Color(red: 0.92, green: 0.86, blue: 0.70),
+
+        dpad:                  Color(red: 0.44, green: 0.42, blue: 0.40),
+        dpadHighlight:         Color(red: 0.62, green: 0.58, blue: 0.56),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 1.00, green: 0.95, blue: 0.78),
+        subtitleColor:         Color(red: 0.92, green: 0.82, blue: 0.55),
+        brandColor:            Color(red: 0.95, green: 0.86, blue: 0.62),
+        speakerGrilleColor:    Color(red: 0.46, green: 0.42, blue: 0.36)
+    )
+
+    /// "Tangerine" — bright orange shell, dark amber bezel, teal A/B.
+    static let orangeLight = GameBoyPalette(
+        shellTop:              Color(red: 0.98, green: 0.62, blue: 0.32),
+        shellBottom:           Color(red: 0.92, green: 0.50, blue: 0.20),
+        shellEdgeHighlight:    Color.white.opacity(0.55),
+        shellEdgeShadow:       Color.black.opacity(0.18),
+
+        screenBezel:           Color(red: 0.36, green: 0.16, blue: 0.04),
+        screenBezelEdge:       Color(red: 0.20, green: 0.08, blue: 0.02),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 0.95, green: 0.18, blue: 0.18),
+        ledOff:                Color(red: 0.40, green: 0.08, blue: 0.08),
+        ledRing:               Color.black.opacity(0.45),
+
+        actionButton:          Color(red: 0.20, green: 0.60, blue: 0.78),
+        actionButtonHighlight: Color(red: 0.45, green: 0.80, blue: 0.94),
+        actionButtonShadow:    Color(red: 0.04, green: 0.24, blue: 0.36),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.56, green: 0.50, blue: 0.46),
+        systemButtonHighlight: Color(red: 0.80, green: 0.74, blue: 0.70),
+        systemButtonLabel:     Color(red: 0.30, green: 0.14, blue: 0.06),
+
+        dpad:                  Color(red: 0.18, green: 0.14, blue: 0.12),
+        dpadHighlight:         Color(red: 0.36, green: 0.32, blue: 0.28),
+        dpadShadow:            Color.black.opacity(0.55),
+
+        headlineColor:         Color(red: 0.24, green: 0.10, blue: 0.04),
+        subtitleColor:         Color(red: 0.36, green: 0.18, blue: 0.08),
+        brandColor:            Color(red: 0.30, green: 0.14, blue: 0.06),
+        speakerGrilleColor:    Color(red: 0.55, green: 0.46, blue: 0.40)
+    )
+
+    /// "Rust" — deep rust-orange chassis with bright cyan A/B.
+    static let orangeDark = GameBoyPalette(
+        shellTop:              Color(red: 0.32, green: 0.14, blue: 0.06),
+        shellBottom:           Color(red: 0.20, green: 0.08, blue: 0.04),
+        shellEdgeHighlight:    Color.white.opacity(0.12),
+        shellEdgeShadow:       Color.black.opacity(0.60),
+
+        screenBezel:           Color(red: 0.14, green: 0.04, blue: 0.02),
+        screenBezelEdge:       Color(red: 0.07, green: 0.02, blue: 0.01),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.30, blue: 0.30),
+        ledOff:                Color(red: 0.30, green: 0.06, blue: 0.06),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 0.32, green: 0.80, blue: 0.96),
+        actionButtonHighlight: Color(red: 0.58, green: 0.92, blue: 1.00),
+        actionButtonShadow:    Color(red: 0.04, green: 0.22, blue: 0.36),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.50, green: 0.46, blue: 0.44),
+        systemButtonHighlight: Color(red: 0.72, green: 0.68, blue: 0.66),
+        systemButtonLabel:     Color(red: 1.00, green: 0.88, blue: 0.72),
+
+        dpad:                  Color(red: 0.46, green: 0.42, blue: 0.40),
+        dpadHighlight:         Color(red: 0.64, green: 0.58, blue: 0.56),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 1.00, green: 0.88, blue: 0.72),
+        subtitleColor:         Color(red: 0.92, green: 0.72, blue: 0.55),
+        brandColor:            Color(red: 0.95, green: 0.78, blue: 0.62),
+        speakerGrilleColor:    Color(red: 0.46, green: 0.38, blue: 0.34)
+    )
+
+    /// "Lavender" — pastel purple shell, dark violet bezel, gold A/B.
+    static let purpleLight = GameBoyPalette(
+        shellTop:              Color(red: 0.78, green: 0.62, blue: 0.95),
+        shellBottom:           Color(red: 0.65, green: 0.50, blue: 0.88),
+        shellEdgeHighlight:    Color.white.opacity(0.55),
+        shellEdgeShadow:       Color.black.opacity(0.20),
+
+        screenBezel:           Color(red: 0.20, green: 0.10, blue: 0.36),
+        screenBezelEdge:       Color(red: 0.10, green: 0.04, blue: 0.20),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 0.95, green: 0.32, blue: 0.55),
+        ledOff:                Color(red: 0.40, green: 0.12, blue: 0.22),
+        ledRing:               Color.black.opacity(0.45),
+
+        actionButton:          Color(red: 0.92, green: 0.78, blue: 0.20),
+        actionButtonHighlight: Color(red: 1.00, green: 0.92, blue: 0.55),
+        actionButtonShadow:    Color(red: 0.50, green: 0.32, blue: 0.04),
+        actionButtonLabel:     Color(red: 0.10, green: 0.04, blue: 0.20),
+
+        systemButton:          Color(red: 0.55, green: 0.52, blue: 0.58),
+        systemButtonHighlight: Color(red: 0.80, green: 0.78, blue: 0.84),
+        systemButtonLabel:     Color(red: 0.18, green: 0.08, blue: 0.34),
+
+        dpad:                  Color(red: 0.16, green: 0.14, blue: 0.20),
+        dpadHighlight:         Color(red: 0.34, green: 0.32, blue: 0.40),
+        dpadShadow:            Color.black.opacity(0.55),
+
+        headlineColor:         Color(red: 0.16, green: 0.06, blue: 0.32),
+        subtitleColor:         Color(red: 0.26, green: 0.12, blue: 0.42),
+        brandColor:            Color(red: 0.20, green: 0.08, blue: 0.36),
+        speakerGrilleColor:    Color(red: 0.50, green: 0.46, blue: 0.55)
+    )
+
+    /// "Eclipse" — deep violet chassis with bright gold A/B.
+    static let purpleDark = GameBoyPalette(
+        shellTop:              Color(red: 0.16, green: 0.06, blue: 0.30),
+        shellBottom:           Color(red: 0.10, green: 0.04, blue: 0.20),
+        shellEdgeHighlight:    Color.white.opacity(0.12),
+        shellEdgeShadow:       Color.black.opacity(0.60),
+
+        screenBezel:           Color(red: 0.08, green: 0.02, blue: 0.14),
+        screenBezelEdge:       Color(red: 0.04, green: 0.01, blue: 0.08),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.30, blue: 0.60),
+        ledOff:                Color(red: 0.34, green: 0.08, blue: 0.20),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 1.00, green: 0.85, blue: 0.25),
+        actionButtonHighlight: Color(red: 1.00, green: 0.95, blue: 0.55),
+        actionButtonShadow:    Color(red: 0.40, green: 0.22, blue: 0.04),
+        actionButtonLabel:     Color(red: 0.10, green: 0.04, blue: 0.20),
+
+        systemButton:          Color(red: 0.48, green: 0.46, blue: 0.54),
+        systemButtonHighlight: Color(red: 0.70, green: 0.68, blue: 0.76),
+        systemButtonLabel:     Color(red: 0.86, green: 0.80, blue: 0.96),
+
+        dpad:                  Color(red: 0.44, green: 0.42, blue: 0.48),
+        dpadHighlight:         Color(red: 0.62, green: 0.58, blue: 0.66),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 0.92, green: 0.82, blue: 1.00),
+        subtitleColor:         Color(red: 0.78, green: 0.65, blue: 0.95),
+        brandColor:            Color(red: 0.85, green: 0.72, blue: 0.98),
+        speakerGrilleColor:    Color(red: 0.42, green: 0.38, blue: 0.48)
+    )
+
+    /// "Stealth" — very dark gray shell, near-black bezel, vibrant
+    /// red A/B for that murdered-out / gaming-mouse aesthetic.
+    static let blackLight = GameBoyPalette(
+        shellTop:              Color(red: 0.20, green: 0.20, blue: 0.22),
+        shellBottom:           Color(red: 0.12, green: 0.12, blue: 0.14),
+        shellEdgeHighlight:    Color.white.opacity(0.10),
+        shellEdgeShadow:       Color.black.opacity(0.50),
+
+        screenBezel:           Color(red: 0.06, green: 0.06, blue: 0.08),
+        screenBezelEdge:       Color(red: 0.02, green: 0.02, blue: 0.04),
+
+        lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
+        lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
+
+        ledOn:                 Color(red: 0.95, green: 0.20, blue: 0.20),
+        ledOff:                Color(red: 0.34, green: 0.06, blue: 0.06),
+        ledRing:               Color.black.opacity(0.55),
+
+        actionButton:          Color(red: 0.92, green: 0.18, blue: 0.22),
+        actionButtonHighlight: Color(red: 1.00, green: 0.45, blue: 0.45),
+        actionButtonShadow:    Color(red: 0.40, green: 0.04, blue: 0.06),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.36, green: 0.36, blue: 0.38),
+        systemButtonHighlight: Color(red: 0.60, green: 0.60, blue: 0.62),
+        systemButtonLabel:     Color(red: 0.85, green: 0.85, blue: 0.86),
+
+        dpad:                  Color(red: 0.32, green: 0.32, blue: 0.34),
+        dpadHighlight:         Color(red: 0.50, green: 0.50, blue: 0.52),
+        dpadShadow:            Color.black.opacity(0.65),
+
+        headlineColor:         Color(red: 0.94, green: 0.94, blue: 0.94),
+        subtitleColor:         Color(red: 0.72, green: 0.72, blue: 0.74),
+        brandColor:            Color(red: 0.82, green: 0.82, blue: 0.84),
+        speakerGrilleColor:    Color(red: 0.40, green: 0.40, blue: 0.42)
+    )
+
+    /// "Onyx" — pitch black chassis with electric red/pink A/B.
+    static let blackDark = GameBoyPalette(
+        shellTop:              Color(red: 0.08, green: 0.08, blue: 0.10),
+        shellBottom:           Color(red: 0.04, green: 0.04, blue: 0.06),
+        shellEdgeHighlight:    Color.white.opacity(0.08),
+        shellEdgeShadow:       Color.black.opacity(0.70),
+
+        screenBezel:           Color(red: 0.02, green: 0.02, blue: 0.04),
+        screenBezelEdge:       Color(red: 0.01, green: 0.01, blue: 0.02),
+
+        lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
+        lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
+
+        ledOn:                 Color(red: 1.00, green: 0.18, blue: 0.30),
+        ledOff:                Color(red: 0.30, green: 0.04, blue: 0.08),
+        ledRing:               Color.black.opacity(0.65),
+
+        actionButton:          Color(red: 1.00, green: 0.18, blue: 0.32),
+        actionButtonHighlight: Color(red: 1.00, green: 0.50, blue: 0.62),
+        actionButtonShadow:    Color(red: 0.40, green: 0.04, blue: 0.10),
+        actionButtonLabel:     Color(red: 0.95, green: 0.92, blue: 0.86),
+
+        systemButton:          Color(red: 0.36, green: 0.36, blue: 0.38),
+        systemButtonHighlight: Color(red: 0.60, green: 0.60, blue: 0.62),
+        systemButtonLabel:     Color(red: 0.88, green: 0.88, blue: 0.90),
+
+        dpad:                  Color(red: 0.38, green: 0.38, blue: 0.40),
+        dpadHighlight:         Color(red: 0.56, green: 0.56, blue: 0.58),
+        dpadShadow:            Color.black.opacity(0.70),
+
+        headlineColor:         Color(red: 0.96, green: 0.96, blue: 0.96),
+        subtitleColor:         Color(red: 0.76, green: 0.76, blue: 0.78),
+        brandColor:            Color(red: 0.86, green: 0.86, blue: 0.88),
+        speakerGrilleColor:    Color(red: 0.36, green: 0.36, blue: 0.38)
+    )
+
     /// "Charcoal DMG" — neutral dark variant of the classic gray
     /// palette. Designed to pair with `classicDMGLight`.
     static let classicDMGDark = GameBoyPalette(
@@ -503,6 +985,24 @@ public extension GameBoyPaletteSet {
         dark:  .oceanBlueDark
     )
 
+    /// Mint — pastel mint-green light, deep forest dark, magenta A/B.
+    static let mint = GameBoyPaletteSet(light: .mintLight, dark: .mintDark)
+
+    /// Pink — bubblegum light, deep plum dark, mint A/B.
+    static let pink = GameBoyPaletteSet(light: .pinkLight, dark: .pinkDark)
+
+    /// Yellow — sunny light, mustard dark, violet A/B.
+    static let yellow = GameBoyPaletteSet(light: .yellowLight, dark: .yellowDark)
+
+    /// Orange — tangerine light, rust dark, cyan A/B.
+    static let orange = GameBoyPaletteSet(light: .orangeLight, dark: .orangeDark)
+
+    /// Purple — lavender light, deep violet dark, gold A/B.
+    static let purple = GameBoyPaletteSet(light: .purpleLight, dark: .purpleDark)
+
+    /// Black — stealth dark gray light, pitch onyx dark, electric red A/B.
+    static let black = GameBoyPaletteSet(light: .blackLight, dark: .blackDark)
+
     /// All built-in sets, in the order they appear in the device
     /// menu's COLOR picker. The string is the persistence id (stable
     /// across renames); the display name is what the menu shows.
@@ -510,7 +1010,13 @@ public extension GameBoyPaletteSet {
         ("dmgMeetsColor", "BERRY",   .dmgMeetsColor),
         ("classicDMG",    "STONE",   .classicDMG),
         ("atomicRed",     "ATOMIC",  .atomicRed),
-        ("oceanBlue",     "OCEAN",   .oceanBlue)
+        ("oceanBlue",     "OCEAN",   .oceanBlue),
+        ("mint",          "MINT",    .mint),
+        ("pink",          "PINK",    .pink),
+        ("yellow",        "YELLOW",  .yellow),
+        ("orange",        "ORANGE",  .orange),
+        ("purple",        "PURPLE",  .purple),
+        ("black",         "BLACK",   .black)
     ]
 
     /// Look up a built-in set by its stable id.
