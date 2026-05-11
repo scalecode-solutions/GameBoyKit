@@ -3,16 +3,21 @@ import GameBoyKit
 
 struct ContentView: View {
     @State private var isPoweredOn: Bool = true
-    @State private var theme: GameBoyTheme = .system
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            // Adaptive backdrop that follows whichever theme is in effect.
+            // Adaptive backdrop that tracks the system color scheme.
             backdrop.ignoresSafeArea()
 
             VStack(spacing: 14) {
                 Spacer()
+
+                Toggle("Power", isOn: $isPoweredOn)
+                    .toggleStyle(.switch)
+                    .tint(.green)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 60)
 
                 GameBoyView(
                     screen: { input in
@@ -34,19 +39,10 @@ struct ContentView: View {
                     startLabel: "START",
                     selectLabel: "SELECT",
                     powerOn: $isPoweredOn,
-                    palette: .dmgMeetsColor,
-                    theme: theme
+                    palette: .dmgMeetsColor
+                    // theme defaults to .system — follows colorScheme automatically
                 )
                 .padding(.horizontal, 20)
-
-                themePicker
-                    .padding(.horizontal, 40)
-
-                Toggle("Power", isOn: $isPoweredOn)
-                    .toggleStyle(.switch)
-                    .tint(.green)
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 60)
 
                 Spacer()
             }
@@ -55,19 +51,9 @@ struct ContentView: View {
 
     // MARK: - Backdrop
 
-    /// Resolves to a light or dark gradient depending on the user's
-    /// theme selection (so the page matches the console).
     private var backdrop: some View {
-        let effective: ColorScheme = {
-            switch theme {
-            case .light:  return .light
-            case .dark:   return .dark
-            case .system: return colorScheme
-            }
-        }()
-
-        return Group {
-            if effective == .dark {
+        Group {
+            if colorScheme == .dark {
                 LinearGradient(
                     colors: [
                         Color(red: 0.13, green: 0.12, blue: 0.18),
@@ -87,17 +73,6 @@ struct ContentView: View {
                 )
             }
         }
-    }
-
-    // MARK: - Theme picker
-
-    private var themePicker: some View {
-        Picker("Theme", selection: $theme) {
-            Text("Light").tag(GameBoyTheme.light)
-            Text("System").tag(GameBoyTheme.system)
-            Text("Dark").tag(GameBoyTheme.dark)
-        }
-        .pickerStyle(.segmented)
     }
 }
 
