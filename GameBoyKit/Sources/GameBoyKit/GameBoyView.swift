@@ -89,22 +89,34 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
     public var body: some View {
         let palette = resolvedPalette
         return ZStack {
-            ShellBackground(palette: palette)
+            // Full-bleed face: the host's screen IS the Game Boy.
+            // Same shell gradient as before, just painting the
+            // available area edge-to-edge instead of a chassis-shaped
+            // object floating on a backdrop. No rounded corners, no
+            // outer drop shadow — the face is the surface.
+            //
+            // Only ignore the bottom safe area: the cream paints under
+            // the home indicator for an immersive edge-to-edge bleed,
+            // but stops cleanly at the top safe-area edge so a host
+            // NavigationStack's nav bar (with back chevron) is fully
+            // respected and never tinted by the face underneath.
+            LinearGradient(
+                colors: [palette.shellTop, palette.shellBottom],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+
             content(palette: palette)
-                .padding(.horizontal, 22)
-                .padding(.top, 18)
-                .padding(.bottom, 24)
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
         }
         // Cartridges / shelf views inside the screen slot read these.
         .environment(\.gameBoyPalette, palette)
         .environment(\.gameBoyPowerOn, powerOn)
         .environment(\.deviceSettings, settings)
-        // We run noticeably taller than the real DMG (~0.61) so that
-        // the controls sit closer to the bottom of the device — that
-        // puts the D-pad and A/B in natural thumb territory when the
-        // user is holding the phone, instead of forcing a reach up.
-        .aspectRatio(0.52, contentMode: .fit)
-        .frame(maxWidth: 520)                         // looks right on phone & iPad
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Layout
@@ -112,14 +124,13 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
     private func content(palette: GameBoyPalette) -> some View {
         VStack(spacing: 0) {
             // Top row: DMG-style power slider on the left, MENU button
-            // mod on the right. Lives on the chassis itself so the
-            // device is fully self-contained.
+            // mod on the right. Sits at the top of the face.
             HStack(alignment: .center) {
                 PowerSwitch(isOn: $powerOn, palette: palette)
                 Spacer(minLength: 0)
                 MenuButton(input: input, palette: palette, label: menuLabel)
             }
-            .padding(.bottom, 6)
+            .padding(.bottom, 12)
 
             // Screen unit (bezel + LCD + power LED + subtitle line)
             ScreenView(
@@ -129,16 +140,15 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
                 subtitle: { subtitleBuilder() }
             )
 
-            // Branding strip: stylized "GAME BOY" headline
+            // Branding strip: stylized wordmark
             BrandingPlate(palette: palette, headline: headlineBuilder)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, 6)
+                .padding(.top, 10)
 
-            // Explicit screen-to-controls gap (was a flexible Spacer).
-            // The extra height from the taller chassis lands here, so
-            // the controls visibly sit lower on the device — within
-            // comfortable thumb reach for a one-handed grip.
-            Spacer(minLength: 48)
+            // Flex gap — absorbs the extra height on taller phones so the
+            // controls naturally sink toward the lower third of the face,
+            // within comfortable thumb reach for a one-handed grip.
+            Spacer(minLength: 32)
 
             // Controls row: D-pad on the left, A/B on the right.
             // D-pad is sized for fat-finger UX — virtual D-pads need
@@ -159,7 +169,6 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
             .padding(.horizontal, 6)
 
             // Fixed gap so the tilted START pill clears the B button.
-            // Flexible spacers split the remaining slack 50/50.
             Color.clear.frame(height: 40)
 
             // Start / Select pair, centered and angled
@@ -171,9 +180,12 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
             )
             .frame(maxWidth: .infinity, alignment: .center)
 
-            Spacer(minLength: 16)
+            // Flex gap — pushes the brand strip to the bottom edge of the face.
+            Spacer(minLength: 20)
 
-            // Bottom row: brand on the left, speaker grille on the right
+            // Bottom row: brand on the left, speaker grille on the right.
+            // Kept as a corner accent — the grille reads as "Game Boy"
+            // without needing a physical chassis curve to host it.
             HStack(alignment: .center) {
                 brandBuilder()
                     .font(GameBoyTypography.brandFont)
