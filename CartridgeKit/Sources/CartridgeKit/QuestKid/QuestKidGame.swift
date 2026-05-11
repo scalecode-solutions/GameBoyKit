@@ -89,16 +89,23 @@ public struct QuestKidGame: View {
         }
 
         // Normal play: room + entities.
+        let hud = QuestKidLayout.hudHeight
         renderRoom(into: &ctx, scale: scale,
                    room: state.currentRoom,
-                   pixelOffsetX: 0, pixelOffsetY: QuestKidLayout.hudHeight)
+                   pixelOffsetX: 0, pixelOffsetY: hud)
+        renderHearts(into: &ctx, scale: scale,
+                     hearts: state.currentHearts,
+                     pixelOffsetX: 0, pixelOffsetY: hud)
         renderEnemies(into: &ctx, scale: scale,
                       enemies: state.currentEnemies,
-                      pixelOffsetX: 0, pixelOffsetY: QuestKidLayout.hudHeight)
+                      pixelOffsetX: 0, pixelOffsetY: hud)
+        renderProjectiles(into: &ctx, scale: scale,
+                          projectiles: state.currentProjectiles,
+                          pixelOffsetX: 0, pixelOffsetY: hud)
         renderPlayer(into: &ctx, scale: scale,
-                     pixelOffsetX: 0, pixelOffsetY: QuestKidLayout.hudHeight)
+                     pixelOffsetX: 0, pixelOffsetY: hud)
         renderSword(into: &ctx, scale: scale,
-                    pixelOffsetX: 0, pixelOffsetY: QuestKidLayout.hudHeight)
+                    pixelOffsetX: 0, pixelOffsetY: hud)
 
         if state.phase == .gameOver {
             renderGameOver(into: &ctx, scale: scale)
@@ -362,20 +369,145 @@ public struct QuestKidGame: View {
         for e in enemies {
             let x = pixelOffsetX + Int(e.x)
             let y = pixelOffsetY + Int(e.y)
-            // Flash white-ish when freshly hit.
-            let bodyColor = e.hitFlash > 0 ? palette.lcdShade0 : palette.lcdShade2
-            let outlineColor = palette.lcdShade3
-            // Body
-            ctx.fillPixel(x: x + 3, y: y + 5, width: 10, height: 9, color: bodyColor, scale: scale)
-            // Tentacle-like legs
-            ctx.fillPixel(x: x + 2, y: y + 13, width: 2, height: 3, color: bodyColor, scale: scale)
-            ctx.fillPixel(x: x + 12, y: y + 13, width: 2, height: 3, color: bodyColor, scale: scale)
-            ctx.fillPixel(x: x + 7, y: y + 13, width: 2, height: 3, color: bodyColor, scale: scale)
-            // Head highlight
-            ctx.fillPixel(x: x + 5, y: y + 7, width: 6, height: 2, color: outlineColor, scale: scale)
-            // Eyes
-            ctx.fillPixel(x: x + 6, y: y + 7, color: palette.lcdShade0, scale: scale)
-            ctx.fillPixel(x: x + 9, y: y + 7, color: palette.lcdShade0, scale: scale)
+            switch e.kind {
+            case .octorock: drawOctorock(into: &ctx, scale: scale, x: x, y: y, e: e)
+            case .shooter:  drawShooter(into:  &ctx, scale: scale, x: x, y: y, e: e)
+            case .charger:  drawCharger(into:  &ctx, scale: scale, x: x, y: y, e: e)
+            }
+        }
+    }
+
+    private func drawOctorock(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        x: Int, y: Int, e: Enemy
+    ) {
+        let bodyColor = e.hitFlash > 0 ? palette.lcdShade0 : palette.lcdShade2
+        let outlineColor = palette.lcdShade3
+        ctx.fillPixel(x: x + 3,  y: y + 5,  width: 10, height: 9, color: bodyColor, scale: scale)
+        ctx.fillPixel(x: x + 2,  y: y + 13, width: 2,  height: 3, color: bodyColor, scale: scale)
+        ctx.fillPixel(x: x + 12, y: y + 13, width: 2,  height: 3, color: bodyColor, scale: scale)
+        ctx.fillPixel(x: x + 7,  y: y + 13, width: 2,  height: 3, color: bodyColor, scale: scale)
+        ctx.fillPixel(x: x + 5,  y: y + 7,  width: 6,  height: 2, color: outlineColor, scale: scale)
+        ctx.fillPixel(x: x + 6,  y: y + 7,  color: palette.lcdShade0, scale: scale)
+        ctx.fillPixel(x: x + 9,  y: y + 7,  color: palette.lcdShade0, scale: scale)
+    }
+
+    /// Shooter — stocky, plant-like turret. Squat base + barrel pointing
+    /// in the facing direction.
+    private func drawShooter(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        x: Int, y: Int, e: Enemy
+    ) {
+        let bodyColor = e.hitFlash > 0 ? palette.lcdShade0 : palette.lcdShade3
+        let trim = palette.lcdShade2
+        // Wide squat base
+        ctx.fillPixel(x: x + 1,  y: y + 9,  width: 14, height: 6, color: bodyColor, scale: scale)
+        // Cap
+        ctx.fillPixel(x: x + 3,  y: y + 5,  width: 10, height: 4, color: bodyColor, scale: scale)
+        ctx.fillPixel(x: x + 4,  y: y + 6,  width: 8,  height: 2, color: trim, scale: scale)
+        // Eye dot center
+        ctx.fillPixel(x: x + 7,  y: y + 11, width: 2,  height: 2, color: palette.lcdShade0, scale: scale)
+        // Barrel — points in facing direction
+        switch e.facing {
+        case .up:    ctx.fillPixel(x: x + 7, y: y + 1, width: 2, height: 5, color: bodyColor, scale: scale)
+        case .down:  ctx.fillPixel(x: x + 7, y: y + 14, width: 2, height: 2, color: bodyColor, scale: scale)
+        case .left:  ctx.fillPixel(x: x,     y: y + 10, width: 3, height: 2, color: bodyColor, scale: scale)
+        case .right: ctx.fillPixel(x: x + 13, y: y + 10, width: 3, height: 2, color: bodyColor, scale: scale)
+        }
+    }
+
+    /// Charger — taller humanoid silhouette, more aggressive look.
+    /// Slightly different proportion from octorock so it reads distinct.
+    private func drawCharger(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        x: Int, y: Int, e: Enemy
+    ) {
+        let bodyColor = e.hitFlash > 0 ? palette.lcdShade0 : palette.lcdShade3
+        let trim = palette.lcdShade2
+        // Body
+        ctx.fillPixel(x: x + 4, y: y + 6,  width: 8, height: 8, color: bodyColor, scale: scale)
+        // Head (smaller, blockier than player)
+        ctx.fillPixel(x: x + 5, y: y + 2,  width: 6, height: 4, color: bodyColor, scale: scale)
+        ctx.fillPixel(x: x + 5, y: y + 3,  width: 6, height: 1, color: trim, scale: scale)
+        // Eyes (angry slits)
+        ctx.fillPixel(x: x + 6, y: y + 4,  width: 1, height: 1, color: palette.lcdShade0, scale: scale)
+        ctx.fillPixel(x: x + 9, y: y + 4,  width: 1, height: 1, color: palette.lcdShade0, scale: scale)
+        // Legs
+        ctx.fillPixel(x: x + 4, y: y + 14, width: 3, height: 2, color: bodyColor, scale: scale)
+        ctx.fillPixel(x: x + 9, y: y + 14, width: 3, height: 2, color: bodyColor, scale: scale)
+        // Charging visual cue — a bright outline tick on the facing edge
+        if e.isCharging {
+            switch e.facing {
+            case .up:    ctx.fillPixel(x: x + 5, y: y + 1, width: 6, height: 1, color: palette.lcdShade0, scale: scale)
+            case .down:  ctx.fillPixel(x: x + 4, y: y + 15, width: 8, height: 1, color: palette.lcdShade0, scale: scale)
+            case .left:  ctx.fillPixel(x: x + 3, y: y + 6, width: 1, height: 8, color: palette.lcdShade0, scale: scale)
+            case .right: ctx.fillPixel(x: x + 12, y: y + 6, width: 1, height: 8, color: palette.lcdShade0, scale: scale)
+            }
+        }
+    }
+
+    // MARK: - Projectiles
+
+    private func renderProjectiles(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        projectiles: [Projectile],
+        pixelOffsetX: Int, pixelOffsetY: Int
+    ) {
+        let inner = palette.lcdShade3
+        let outer = palette.lcdShade2
+        for p in projectiles {
+            let x = pixelOffsetX + Int(p.x)
+            let y = pixelOffsetY + Int(p.y)
+            // 6×6 rock pixel:
+            //   . X X .
+            //   X X X X
+            //   X X X X
+            //   . X X .
+            ctx.fillPixel(x: x + 1, y: y,     width: 4, height: 1, color: outer, scale: scale)
+            ctx.fillPixel(x: x,     y: y + 1, width: 6, height: 4, color: outer, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 5, width: 4, height: 1, color: outer, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 2, width: 2, height: 2, color: inner, scale: scale)
+        }
+    }
+
+    // MARK: - Heart pickups
+
+    private func renderHearts(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        hearts: [HeartPickup],
+        pixelOffsetX: Int, pixelOffsetY: Int
+    ) {
+        // Tiny bob animation: y +/- 1 px on a sine cycle.
+        let outline = palette.lcdShade3
+        let fill = palette.lcdShade2
+        let highlight = palette.lcdShade0
+        for h in hearts {
+            // Despawn flicker on the last 2 seconds.
+            if h.ttl < 2 {
+                let phase = Int(h.ttl * 8) % 2
+                if phase == 0 { continue }
+            }
+            let bob = Int(round(sin(h.bobPhase * 4) * 1))
+            let x = pixelOffsetX + Int(h.x)
+            let y = pixelOffsetY + Int(h.y) + bob
+            // 8×7 heart shape
+            let bits: [[Int]] = [
+                [0,1,1,0,0,1,1,0],
+                [1,2,2,1,1,2,2,1],
+                [1,2,2,2,2,2,2,1],
+                [1,2,2,2,2,2,2,1],
+                [0,1,2,2,2,2,1,0],
+                [0,0,1,2,2,1,0,0],
+                [0,0,0,1,1,0,0,0],
+            ]
+            for (row, line) in bits.enumerated() {
+                for (col, v) in line.enumerated() where v != 0 {
+                    let c: Color = v == 1 ? outline : fill
+                    ctx.fillPixel(x: x + col, y: y + row, color: c, scale: scale)
+                }
+            }
+            // Sparkle highlight
+            ctx.fillPixel(x: x + 2, y: y + 2, color: highlight, scale: scale)
         }
     }
 

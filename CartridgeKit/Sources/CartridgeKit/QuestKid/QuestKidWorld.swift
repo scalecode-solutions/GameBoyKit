@@ -55,14 +55,20 @@ enum Direction: CaseIterable, Sendable, Hashable {
 
 // MARK: - Room
 
+struct EnemySpawn: Sendable {
+    let kind: EnemyKind
+    let col: Int
+    let row: Int
+}
+
 struct Room: Sendable {
     let id: Int
     /// `roomCols × roomRows` tiles, row-major. Index = `y * cols + x`.
     let tiles: [TileKind]
     /// Map of edge-direction → adjacent room id (for transition wiring).
     let neighbors: [Direction: Int]
-    /// Initial enemy spawn positions in *tile* coordinates.
-    let enemySpawns: [(col: Int, row: Int)]
+    /// Initial enemy spawns in *tile* coordinates with their kind.
+    let enemySpawns: [EnemySpawn]
 
     func tile(col: Int, row: Int) -> TileKind {
         guard (0..<QuestKidLayout.roomCols).contains(col),
@@ -108,7 +114,7 @@ enum QuestKidWorld {
             "RRRRRRRDRRRRRRRR"
         ),
         neighbors: [.right: 1, .down: 2],
-        enemySpawns: [(8, 4)]
+        enemySpawns: [EnemySpawn(kind: .octorock, col: 8, row: 4)]
     )
 
     /// Northeast room. Exits: left → 0, down → 3.
@@ -125,7 +131,10 @@ enum QuestKidWorld {
             "RRRRRRRDRRRRRRRR"
         ),
         neighbors: [.left: 0, .down: 3],
-        enemySpawns: [(11, 5), (6, 3)]
+        enemySpawns: [
+            EnemySpawn(kind: .octorock, col: 11, row: 5),
+            EnemySpawn(kind: .charger,  col: 6,  row: 3)
+        ]
     )
 
     /// Southwest room. Exits: up → 0, right → 3.
@@ -142,7 +151,7 @@ enum QuestKidWorld {
             "RRRRRRRRRRRRRRRR"
         ),
         neighbors: [.up: 0, .right: 3],
-        enemySpawns: [(12, 5)]
+        enemySpawns: [EnemySpawn(kind: .shooter, col: 12, row: 5)]
     )
 
     /// Southeast room. Sand floor with scattered boulders.
@@ -160,7 +169,10 @@ enum QuestKidWorld {
             "RRRRRRRRRRRRRRRR"
         ),
         neighbors: [.up: 1, .left: 2],
-        enemySpawns: [(10, 3), (5, 5)]
+        enemySpawns: [
+            EnemySpawn(kind: .shooter, col: 10, row: 3),
+            EnemySpawn(kind: .charger, col: 5,  row: 5)
+        ]
     )
 
     // MARK: - Tile builder
