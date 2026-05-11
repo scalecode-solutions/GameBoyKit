@@ -27,9 +27,9 @@ struct ContentView: View {
                             ]
                         )
                     },
-                    headline: { Text("CLINGY BOY") },
+                    headline: { Text("mvBOY") },
                     subtitle: { Text("DOT MATRIX • TAP & DRAG") },
-                    brand:    { Text("travis ®") },
+                    brand:    { Text("MV®") },
                     aLabel: "A",
                     bLabel: "B",
                     startLabel: "START",

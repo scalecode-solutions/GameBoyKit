@@ -275,7 +275,7 @@ private struct AboutSubScreen: View {
                 anchor: .center
             )
             ctx.draw(
-                Text("by travis ®")
+                Text("by scalecode ®")
                     .font(.system(size: 9 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
