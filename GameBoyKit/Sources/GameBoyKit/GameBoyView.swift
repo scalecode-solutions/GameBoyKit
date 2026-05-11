@@ -96,7 +96,7 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         // the action / system button rows breathing room and the top
         // power-slider row a clean home above the screen.
         .aspectRatio(0.56, contentMode: .fit)
-        .frame(maxWidth: 480)                         // looks right on phone & iPad
+        .frame(maxWidth: 520)                         // looks right on phone & iPad
     }
 
     // MARK: - Layout
@@ -128,10 +128,14 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
 
             Spacer(minLength: 8)
 
-            // Controls row: D-pad on the left, A/B on the right
+            // Controls row: D-pad on the left, A/B on the right.
+            // D-pad is sized for fat-finger UX — virtual D-pads need
+            // to be bigger than their hardware analog because there's
+            // no tactile cross to feel for, so each direction needs to
+            // be comfortably wider than a fingertip contact patch.
             HStack(alignment: .center) {
                 DPad(palette: palette, input: input)
-                    .frame(width: 110, height: 110)
+                    .frame(width: 140, height: 140)
                 Spacer(minLength: 0)
                 ActionButtons(
                     palette: palette,
