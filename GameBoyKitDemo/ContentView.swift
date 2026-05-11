@@ -17,7 +17,8 @@ struct ContentView: View {
                     cartridges: [
                         .snake,
                         .questKid,
-                        .lander
+                        .lander,
+                        .hopper
                     ]
                 )
             },
