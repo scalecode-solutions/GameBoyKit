@@ -39,12 +39,34 @@ public struct QuestKidGame: View {
             guard powerOn, pressed else { return }
             switch state.phase {
             case .title:
-                state.start()
+                state.openDungeonSelect()
+            case .dungeonSelect:
+                state.enterDungeon(state.currentDungeonIndex)
+                resetCounter &+= 1
             case .gameOver, .won:
                 state.reset()
                 resetCounter &+= 1
             default:
                 swingPending = true
+            }
+        }
+        // D-pad navigates the dungeon-select dots when on that screen.
+        .onChange(of: input.dpad) { _, newValue in
+            guard powerOn, state.phase == .dungeonSelect,
+                  let newDir = newValue else { return }
+            state.moveDungeonSelectCursor(newDir)
+        }
+        // B button on win/gameOver returns to dungeon-select; on
+        // dungeon-select, returns to title.
+        .onChange(of: input.bPressed) { _, pressed in
+            guard powerOn, pressed else { return }
+            switch state.phase {
+            case .gameOver, .won:
+                state.returnToDungeonSelect()
+            case .dungeonSelect:
+                state.returnToTitle()
+            default:
+                break
             }
         }
         .task(id: "\(resetCounter)-\(powerOn)") {
@@ -80,9 +102,13 @@ public struct QuestKidGame: View {
         ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                       color: palette.lcdShade0, scale: scale)
 
-        // Title screen short-circuits the rest of the render.
+        // Title and dungeon-select short-circuit the rest of the render.
         if state.phase == .title {
             renderTitle(into: &ctx, scale: scale)
+            return
+        }
+        if state.phase == .dungeonSelect {
+            renderDungeonSelect(into: &ctx, scale: scale)
             return
         }
 
@@ -763,13 +789,21 @@ public struct QuestKidGame: View {
         // Decorative sword glyph centered below subtitle
         renderSwordGlyph(into: &ctx, scale: scale, centerX: 128, centerY: 84)
 
-        // Saved record line
-        if state.record.cleared {
-            let halfHearts = state.record.bestHearts
+        // Saved record line — shown only after the tutorial is cleared.
+        if state.record.cleared["tutorial"] == true {
+            let halfHearts = state.record.bestHearts["tutorial"] ?? 0
             let full = halfHearts / 2
             let halfStr = halfHearts % 2 == 1 ? ".5" : ""
+            // Count cleared SHELBY dungeons for a progress hint.
+            let totalLetterDungeons = state.dungeons.filter { $0.letter != nil }.count
+            let clearedLetterDungeons = state.dungeons
+                .filter { $0.letter != nil && state.record.cleared[$0.id] == true }
+                .count
+            let progressLine = totalLetterDungeons > 0
+                ? "✓ TUTORIAL CLEARED · \(clearedLetterDungeons)/\(totalLetterDungeons) DUNGEONS"
+                : "✓ TUTORIAL CLEARED · BEST: \(full)\(halfStr) HEARTS"
             ctx.draw(
-                Text("✓ CLEARED  ·  BEST: \(full)\(halfStr) HEARTS")
+                Text(progressLine)
                     .font(.system(size: 9 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
@@ -789,6 +823,99 @@ public struct QuestKidGame: View {
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
                 at: CGPoint(x: 128 * scale.width, y: 122 * scale.height),
+                anchor: .center
+            )
+        }
+    }
+
+    // MARK: - Dungeon select (heart-shape map of dungeons)
+
+    private func renderDungeonSelect(into ctx: inout GraphicsContext, scale: CGSize) {
+        // Background panel
+        ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
+                      color: palette.lcdShade0, scale: scale)
+        // Header bar
+        ctx.fillPixel(x: 0, y: 0, width: 256, height: 14,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.draw(
+            Text("SELECT QUEST")
+                .font(.system(size: 10 * scale.height,
+                              weight: .heavy,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade0),
+            at: CGPoint(x: 128 * scale.width, y: 7 * scale.height),
+            anchor: .center
+        )
+
+        // Draw each dungeon's dot (subtly tracing a heart silhouette).
+        for (i, dungeon) in state.dungeons.enumerated() {
+            let isSelected = i == state.currentDungeonIndex
+            let cleared = state.record.cleared[dungeon.id] == true
+            let cx = dungeon.mapDotX
+            let cy = dungeon.mapDotY
+
+            // Soft halo for the selected dot.
+            if isSelected {
+                ctx.fillPixel(x: cx - 5, y: cy - 5, width: 10, height: 10,
+                              color: palette.lcdShade2.opacity(0.5), scale: scale)
+            }
+            // The dot itself
+            let dotColor: Color = cleared
+                ? palette.lcdShade3
+                : (isSelected ? palette.lcdShade3 : palette.lcdShade2)
+            ctx.fillPixel(x: cx - 3, y: cy - 3, width: 6, height: 6,
+                          color: dotColor, scale: scale)
+            ctx.fillPixel(x: cx - 2, y: cy - 4, width: 4, height: 8,
+                          color: dotColor, scale: scale)
+            ctx.fillPixel(x: cx - 4, y: cy - 2, width: 8, height: 4,
+                          color: dotColor, scale: scale)
+            // Inner highlight (only when selected) — gives a pulsing feel.
+            if isSelected {
+                ctx.fillPixel(x: cx - 1, y: cy - 1, width: 2, height: 2,
+                              color: palette.lcdShade0, scale: scale)
+            }
+            // Tiny ✓ next to cleared dungeons.
+            if cleared {
+                ctx.fillPixel(x: cx + 5, y: cy - 2, width: 1, height: 2,
+                              color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: cx + 6, y: cy,     width: 1, height: 2,
+                              color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: cx + 7, y: cy - 1, width: 1, height: 1,
+                              color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: cx + 8, y: cy - 3, width: 1, height: 1,
+                              color: palette.lcdShade3, scale: scale)
+            }
+        }
+
+        // Selected dungeon's name + letter
+        let current = state.dungeons[state.currentDungeonIndex]
+        ctx.draw(
+            Text(current.name)
+                .font(.system(size: 12 * scale.height,
+                              weight: .heavy,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: 128 * scale.width, y: 122 * scale.height),
+            anchor: .center
+        )
+        if let letter = current.letter {
+            ctx.draw(
+                Text("LETTER: \(letter)")
+                    .font(.system(size: 7 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade2),
+                at: CGPoint(x: 128 * scale.width, y: 132 * scale.height),
+                anchor: .center
+            )
+        } else {
+            ctx.draw(
+                Text("TUTORIAL")
+                    .font(.system(size: 7 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade2),
+                at: CGPoint(x: 128 * scale.width, y: 132 * scale.height),
                 anchor: .center
             )
         }

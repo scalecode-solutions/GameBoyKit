@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import GameBoyKit   // DPadDirection
 
 // MARK: - Entities
 
@@ -176,6 +177,7 @@ final class QuestKidState {
 
     enum Phase: Equatable, Sendable {
         case title
+        case dungeonSelect          // heart-shaped menu of dungeons
         case playing
         case roomTransition(from: Int, to: Int, progress: Double, dir: Direction)
         case gameOver
@@ -186,21 +188,40 @@ final class QuestKidState {
 
     /// Persistent record across cartridge launches.
     struct SaveRecord: Sendable, Equatable {
-        var cleared: Bool = false
-        /// Best player HP (in half-hearts) on completion. 0 = not cleared.
-        var bestHearts: Int = 0
+        /// Per-dungeon-id → has been cleared at least once.
+        var cleared: [String: Bool] = [:]
+        /// Per-dungeon-id → best player HP (half-hearts) at win. 0 = N/A.
+        var bestHearts: [String: Int] = [:]
+
+        /// True if every SHELBY dungeon (not just tutorial) is cleared.
+        func allCleared(dungeons: [Dungeon]) -> Bool {
+            dungeons.allSatisfy { cleared[$0.id] == true }
+        }
     }
     private(set) var record: SaveRecord
 
     // MARK: World
 
-    private(set) var rooms: [Room] = QuestKidWorld.rooms
+    // MARK: - World pointers
+
+    /// All dungeons that exist (the source of truth for the world).
+    let dungeons: [Dungeon] = QuestKidWorld.dungeons
+    /// Which dungeon the player is currently in, or which one is
+    /// highlighted on the dungeon-select screen.
+    private(set) var currentDungeonIndex: Int = 0
+    /// Which room the player is currently in *within* the current dungeon.
     private(set) var currentRoomIndex: Int = 0
-    /// Per-room mutable state. Indexed by room id.
-    private(set) var enemiesPerRoom: [[Enemy]]
-    private(set) var projectilesPerRoom: [[Projectile]]
-    private(set) var heartsPerRoom: [[HeartPickup]]
-    private(set) var keysPerRoom: [[KeyPickup]]
+
+    /// Per-dungeon, per-room mutable entity state.
+    /// Outer index = dungeon, inner index = room.
+    private(set) var enemiesByDungeonAndRoom: [[[Enemy]]]
+    private(set) var projectilesByDungeonAndRoom: [[[Projectile]]]
+    private(set) var heartsByDungeonAndRoom: [[[HeartPickup]]]
+    private(set) var keysByDungeonAndRoom: [[[KeyPickup]]]
+
+    /// Convenience pointers to the *current* dungeon's structure.
+    var currentDungeon: Dungeon { dungeons[currentDungeonIndex] }
+    var rooms: [Room] { currentDungeon.rooms }
 
     // MARK: Player
 
@@ -246,78 +267,90 @@ final class QuestKidState {
 
     // MARK: - Persistence
 
-    private static let savedClearedKey = "gbk.questkid.cleared"
-    private static let savedHeartsKey  = "gbk.questkid.bestHearts"
+    private static let savedClearedKey = "gbk.questkid.clearedByDungeon"
+    private static let savedHeartsKey  = "gbk.questkid.bestHeartsByDungeon"
 
     private static func loadRecord() -> SaveRecord {
         let defaults = UserDefaults.standard
-        return SaveRecord(
-            cleared: defaults.bool(forKey: savedClearedKey),
-            bestHearts: defaults.integer(forKey: savedHeartsKey)
-        )
+        let cleared = (defaults.dictionary(forKey: savedClearedKey) as? [String: Bool]) ?? [:]
+        let hearts  = (defaults.dictionary(forKey: savedHeartsKey)  as? [String: Int])  ?? [:]
+        return SaveRecord(cleared: cleared, bestHearts: hearts)
     }
 
     private func saveRecord() {
         let defaults = UserDefaults.standard
-        defaults.set(record.cleared, forKey: Self.savedClearedKey)
+        defaults.set(record.cleared,    forKey: Self.savedClearedKey)
         defaults.set(record.bestHearts, forKey: Self.savedHeartsKey)
     }
 
     init() {
         self.record = Self.loadRecord()
-        // Hydrate per-room state from spawn templates.
-        var enemies: [[Enemy]] = []
-        for room in QuestKidWorld.rooms {
-            let roomEnemies = room.enemySpawns.map { spawn in
-                Enemy.make(
-                    kind: spawn.kind,
-                    x: Double(spawn.col * QuestKidLayout.tileSize),
-                    y: Double(spawn.row * QuestKidLayout.tileSize)
-                )
+        // Hydrate per-dungeon, per-room entity arrays from spawn templates.
+        var allEnemies: [[[Enemy]]] = []
+        var allHearts:  [[[HeartPickup]]] = []
+        var allKeys:    [[[KeyPickup]]] = []
+        var allProjs:   [[[Projectile]]] = []
+        for dungeon in QuestKidWorld.dungeons {
+            // Enemies — from each room's spawn templates.
+            let rooms = dungeon.rooms.map { room -> [Enemy] in
+                room.enemySpawns.map { spawn in
+                    Enemy.make(
+                        kind: spawn.kind,
+                        x: Double(spawn.col * QuestKidLayout.tileSize),
+                        y: Double(spawn.row * QuestKidLayout.tileSize)
+                    )
+                }
             }
-            enemies.append(roomEnemies)
+            allEnemies.append(rooms)
+            // Projectiles always start empty.
+            allProjs.append(Array(repeating: [], count: dungeon.rooms.count))
+            // Hearts — only present if this dungeon defines a big-heart slot.
+            var hearts: [[HeartPickup]] = Array(repeating: [], count: dungeon.rooms.count)
+            if let h = dungeon.bigHeartLocation {
+                hearts[h.roomID] = [HeartPickup(
+                    id: UUID(),
+                    x: Double(h.col * QuestKidLayout.tileSize) + 1,
+                    y: Double(h.row * QuestKidLayout.tileSize) + 1,
+                    kind: .big
+                )]
+            }
+            allHearts.append(hearts)
+            // Keys — only present if this dungeon defines a key slot.
+            var keys: [[KeyPickup]] = Array(repeating: [], count: dungeon.rooms.count)
+            if let k = dungeon.keyLocation {
+                keys[k.roomID] = [KeyPickup(
+                    id: UUID(),
+                    x: Double(k.col * QuestKidLayout.tileSize) + 3,
+                    y: Double(k.row * QuestKidLayout.tileSize) + 3
+                )]
+            }
+            allKeys.append(keys)
         }
-        self.enemiesPerRoom = enemies
-        self.projectilesPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        // Hearts: a persistent big heart sits in the centre of the vault.
-        var hearts: [[HeartPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        hearts[Self.vaultRoomID] = [HeartPickup(
-            id: UUID(),
-            x: Double(7 * QuestKidLayout.tileSize) + 1,
-            y: Double(3 * QuestKidLayout.tileSize) + 1,
-            kind: .big
-        )]
-        self.heartsPerRoom = hearts
-        // Place a key pickup in the antechamber, on the floor between
-        // the two pillars (col 7, row 4 ≈ middle of the room).
-        var keys: [[KeyPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        keys[Self.keyRoomID] = [KeyPickup(
-            id: UUID(),
-            x: Double(7 * QuestKidLayout.tileSize) + 3,
-            y: Double(3 * QuestKidLayout.tileSize) + 3
-        )]
-        self.keysPerRoom = keys
-        // Place player roughly centered in the meadow.
+        self.enemiesByDungeonAndRoom = allEnemies
+        self.projectilesByDungeonAndRoom = allProjs
+        self.heartsByDungeonAndRoom = allHearts
+        self.keysByDungeonAndRoom = allKeys
+        // Player starts roughly centered in whichever dungeon's start room.
         self.player.x = Double((QuestKidLayout.roomCols / 2 - 1) * QuestKidLayout.tileSize)
         self.player.y = Double((QuestKidLayout.roomRows / 2 - 1) * QuestKidLayout.tileSize)
     }
 
     var currentRoom: Room { rooms[currentRoomIndex] }
     var currentEnemies: [Enemy] {
-        get { enemiesPerRoom[currentRoomIndex] }
-        set { enemiesPerRoom[currentRoomIndex] = newValue }
+        get { enemiesByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] }
+        set { enemiesByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] = newValue }
     }
     var currentProjectiles: [Projectile] {
-        get { projectilesPerRoom[currentRoomIndex] }
-        set { projectilesPerRoom[currentRoomIndex] = newValue }
+        get { projectilesByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] }
+        set { projectilesByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] = newValue }
     }
     var currentHearts: [HeartPickup] {
-        get { heartsPerRoom[currentRoomIndex] }
-        set { heartsPerRoom[currentRoomIndex] = newValue }
+        get { heartsByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] }
+        set { heartsByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] = newValue }
     }
     var currentKeys: [KeyPickup] {
-        get { keysPerRoom[currentRoomIndex] }
-        set { keysPerRoom[currentRoomIndex] = newValue }
+        get { keysByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] }
+        set { keysByDungeonAndRoom[currentDungeonIndex][currentRoomIndex] = newValue }
     }
 
     // MARK: - Tick
@@ -325,15 +358,102 @@ final class QuestKidState {
     /// Drive one frame of simulation. `dt` is elapsed seconds since the
     /// previous tick. `input` is the live D-pad direction (nil when not
     /// pressed) and a flag for the A button edge.
-    /// Start (or restart) the game from the title screen.
-    func start() {
-        guard phase == .title else { return }
+    /// Move from the title screen to the dungeon-select screen.
+    func openDungeonSelect() {
+        if phase == .title { phase = .dungeonSelect }
+    }
+
+    /// Enter a specific dungeon from the select screen.
+    func enterDungeon(_ index: Int) {
+        guard dungeons.indices.contains(index) else { return }
+        currentDungeonIndex = index
+        let dungeon = dungeons[index]
+        currentRoomIndex = dungeon.startRoomID
+        // Place player roughly centered in the start room.
+        player = Player()
+        player.x = Double((QuestKidLayout.roomCols / 2 - 1) * QuestKidLayout.tileSize)
+        player.y = Double((QuestKidLayout.roomRows / 2 - 1) * QuestKidLayout.tileSize)
+        // Re-hydrate ONLY the current dungeon so enemies respawn for this run.
+        rehydrateCurrentDungeon()
         phase = .playing
+    }
+
+    /// Return from gameOver/won back to the dungeon-select screen.
+    func returnToDungeonSelect() {
+        phase = .dungeonSelect
+    }
+
+    /// Go back from dungeon-select to the title screen.
+    func returnToTitle() {
+        phase = .title
+    }
+
+    /// Move the dungeon-select cursor in a cardinal direction, snapping
+    /// to whichever dungeon dot is closest along that axis.
+    func moveDungeonSelectCursor(_ dir: DPadDirection) {
+        let current = dungeons[currentDungeonIndex]
+        let cx = current.mapDotX, cy = current.mapDotY
+        // Filter candidates by which side of `current` they sit on, then
+        // pick the closest by Euclidean distance.
+        var best: (idx: Int, dist: Double)? = nil
+        for (i, d) in dungeons.enumerated() where i != currentDungeonIndex {
+            let dx = d.mapDotX - cx
+            let dy = d.mapDotY - cy
+            // Require the candidate to be in the right hemisphere for `dir`.
+            let inDirection: Bool
+            if dir.isUp    && dy < -4 { inDirection = true }
+            else if dir.isDown && dy > 4  { inDirection = true }
+            else if dir.isLeft  && dx < -4 { inDirection = true }
+            else if dir.isRight && dx > 4  { inDirection = true }
+            else { inDirection = false }
+            guard inDirection else { continue }
+            let dist = sqrt(Double(dx * dx + dy * dy))
+            if best == nil || dist < best!.dist {
+                best = (i, dist)
+            }
+        }
+        if let pick = best { currentDungeonIndex = pick.idx }
+    }
+
+    /// Re-spawn enemies, projectiles, pickups for the current dungeon
+    /// (used on enter and on retry). Other dungeons stay untouched.
+    private func rehydrateCurrentDungeon() {
+        let d = currentDungeonIndex
+        let dungeon = dungeons[d]
+        enemiesByDungeonAndRoom[d] = dungeon.rooms.map { room in
+            room.enemySpawns.map { spawn in
+                Enemy.make(
+                    kind: spawn.kind,
+                    x: Double(spawn.col * QuestKidLayout.tileSize),
+                    y: Double(spawn.row * QuestKidLayout.tileSize)
+                )
+            }
+        }
+        projectilesByDungeonAndRoom[d] = Array(repeating: [], count: dungeon.rooms.count)
+        var hearts: [[HeartPickup]] = Array(repeating: [], count: dungeon.rooms.count)
+        if let h = dungeon.bigHeartLocation {
+            hearts[h.roomID] = [HeartPickup(
+                id: UUID(),
+                x: Double(h.col * QuestKidLayout.tileSize) + 1,
+                y: Double(h.row * QuestKidLayout.tileSize) + 1,
+                kind: .big
+            )]
+        }
+        heartsByDungeonAndRoom[d] = hearts
+        var keys: [[KeyPickup]] = Array(repeating: [], count: dungeon.rooms.count)
+        if let k = dungeon.keyLocation {
+            keys[k.roomID] = [KeyPickup(
+                id: UUID(),
+                x: Double(k.col * QuestKidLayout.tileSize) + 3,
+                y: Double(k.row * QuestKidLayout.tileSize) + 3
+            )]
+        }
+        keysByDungeonAndRoom[d] = keys
     }
 
     func tick(dt: Double, dpad: Direction?, swingPressed: Bool) {
         switch phase {
-        case .title, .gameOver, .won:
+        case .title, .dungeonSelect, .gameOver, .won:
             return
         case .roomTransition(let from, let to, let progress, let dir):
             let newProgress = progress + dt / Self.roomTransitionDuration
@@ -416,9 +536,10 @@ final class QuestKidState {
             }
             currentHearts = hearts
             if bossDied {
-                // Persist the win + best-hearts record.
-                record.cleared = true
-                record.bestHearts = max(record.bestHearts, player.hp)
+                // Persist the win + best-hearts record for *this* dungeon.
+                let id = currentDungeon.id
+                record.cleared[id] = true
+                record.bestHearts[id] = max(record.bestHearts[id] ?? 0, player.hp)
                 saveRecord()
                 phase = .won
                 return
@@ -955,39 +1076,9 @@ final class QuestKidState {
 
     // MARK: - Lifecycle
 
+    /// Retry the *current* dungeon from its start room. Other dungeons'
+    /// states are preserved (so you don't have to redo cleared ones).
     func reset() {
-        var enemies: [[Enemy]] = []
-        for room in QuestKidWorld.rooms {
-            let roomEnemies = room.enemySpawns.map { spawn in
-                Enemy.make(
-                    kind: spawn.kind,
-                    x: Double(spawn.col * QuestKidLayout.tileSize),
-                    y: Double(spawn.row * QuestKidLayout.tileSize)
-                )
-            }
-            enemies.append(roomEnemies)
-        }
-        enemiesPerRoom = enemies
-        projectilesPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        var hearts: [[HeartPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        hearts[Self.vaultRoomID] = [HeartPickup(
-            id: UUID(),
-            x: Double(7 * QuestKidLayout.tileSize) + 1,
-            y: Double(3 * QuestKidLayout.tileSize) + 1,
-            kind: .big
-        )]
-        heartsPerRoom = hearts
-        var keys: [[KeyPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
-        keys[Self.keyRoomID] = [KeyPickup(
-            id: UUID(),
-            x: Double(7 * QuestKidLayout.tileSize) + 3,
-            y: Double(3 * QuestKidLayout.tileSize) + 3
-        )]
-        keysPerRoom = keys
-        currentRoomIndex = 0
-        player = Player()
-        player.x = Double((QuestKidLayout.roomCols / 2 - 1) * QuestKidLayout.tileSize)
-        player.y = Double((QuestKidLayout.roomRows / 2 - 1) * QuestKidLayout.tileSize)
-        phase = .playing    // skip the title on retry — straight to play
+        enterDungeon(currentDungeonIndex)
     }
 }
