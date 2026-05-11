@@ -40,6 +40,11 @@ public struct LanderGame: View {
             guard powerOn, pressed else { return }
             handleStartPress()
         }
+        .onChange(of: input.dpad) { _, dir in
+            guard powerOn, state.phase == .modeSelect, let dir else { return }
+            if dir.isUp        { state.moveModeSelectCursor(-1) }
+            else if dir.isDown { state.moveModeSelectCursor( 1) }
+        }
         .task(id: "\(resetCounter)-\(powerOn)") {
             guard powerOn else { return }
             await runTickLoop()
@@ -256,12 +261,14 @@ public struct LanderGame: View {
                           color: palette.lcdShade1, scale: scale)
         }
 
-        // Alignment beam: when the ship is horizontally over the pad,
-        // draw a faint vertical column up from the pad surface to the
-        // HUD baseline. Communicates "you're lined up, now just slow
+        // Alignment beam: when the *landing element* (ship in Classic,
+        // cargo in Pendulum) is horizontally over the pad, draw a
+        // faint vertical column up from the pad surface to the HUD
+        // baseline. Communicates "you're lined up, now just slow
         // down" without overwhelming the screen.
-        let aligned = state.shipX >= Double(LanderState.padLeft)
-                   && state.shipX <= Double(LanderState.padRight)
+        let alignTargetX: Double = (state.mode == .pendulum) ? state.cargoX : state.shipX
+        let aligned = alignTargetX >= Double(LanderState.padLeft)
+                   && alignTargetX <= Double(LanderState.padRight)
         if aligned {
             let beamX = LanderState.padLeft
             let beamW = LanderState.padWidth
@@ -306,11 +313,75 @@ public struct LanderGame: View {
                           color: palette.lcdShade3, scale: scale)
         }
 
+        // Pendulum tether + cargo — drawn before the ship so the ship
+        // sprite sits ON TOP of the tether attachment point (cleaner
+        // look at the hook).
+        if state.mode == .pendulum {
+            drawTetherAndCargo(into: &ctx, scale: scale)
+        }
+
         // Ship
         drawShip(into: &ctx, scale: scale)
 
         // HUD overlay (drawn last so it's on top)
         drawHUD(into: &ctx, scale: scale)
+    }
+
+    /// Draws the tether (1px line from ship's belly to cargo's top)
+    /// and the cargo crate. Skips rendering if the tether has snapped
+    /// — that case ends the run on the same frame anyway, so the
+    /// result banner will be on top by next render.
+    private func drawTetherAndCargo(into ctx: inout GraphicsContext, scale: CGSize) {
+        guard !state.tetherSnapped else { return }
+
+        let sx = Int(state.shipX.rounded())
+        let sy = Int(state.shipY.rounded())
+        let cx = Int(state.cargoX.rounded())
+        let cy = Int(state.cargoY.rounded())
+
+        // Tether — Bresenham-ish line, drawn in shade2 so it reads as
+        // a darker thread against the sky but stays visually quieter
+        // than the ship body.
+        drawLine(into: &ctx, scale: scale,
+                 x0: sx, y0: sy + 5,
+                 x1: cx, y1: cy - Int(LanderState.cargoHalfH),
+                 color: palette.lcdShade2)
+
+        // Cargo crate — small square outline + interior cross-hatch
+        // to read as a crate even at 6x6 pixels.
+        let half = Int(LanderState.cargoHalfW)
+        ctx.fillPixel(x: cx - half, y: cy - half,
+                      width: half * 2, height: half * 2,
+                      color: palette.lcdShade3, scale: scale)
+        // Crate "X" detail — a single diagonal pixel in the center
+        // so the crate isn't just a solid block.
+        ctx.fillPixel(x: cx, y: cy, width: 1, height: 1,
+                      color: palette.lcdShade1, scale: scale)
+    }
+
+    /// Tiny line draw via Bresenham — sufficient for a short tether at
+    /// our 256×144 scale. Drawn in single-pixel cells via fillPixel so
+    /// it matches the rest of the canvas style.
+    private func drawLine(
+        into ctx: inout GraphicsContext,
+        scale: CGSize,
+        x0: Int, y0: Int,
+        x1: Int, y1: Int,
+        color: Color
+    ) {
+        var x0 = x0, y0 = y0
+        let dx =  abs(x1 - x0)
+        let dy = -abs(y1 - y0)
+        let sx = x0 < x1 ? 1 : -1
+        let sy = y0 < y1 ? 1 : -1
+        var err = dx + dy
+        while true {
+            ctx.fillPixel(x: x0, y: y0, width: 1, height: 1, color: color, scale: scale)
+            if x0 == x1 && y0 == y1 { break }
+            let e2 = 2 * err
+            if e2 >= dy { err += dy; x0 += sx }
+            if e2 <= dx { err += dx; y0 += sy }
+        }
     }
 
     private func drawShip(into ctx: inout GraphicsContext, scale: CGSize) {
