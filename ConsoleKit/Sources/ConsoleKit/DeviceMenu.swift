@@ -164,8 +164,10 @@ internal struct DeviceMenu: View {
             guard pressed else { return }
             activateSelection()
         }
-        .onChange(of: input.bPressed)    { _, pressed in if pressed { onClose() } }
-        .onChange(of: input.menuPressed) { _, pressed in if pressed { onClose() } }
+        .onChange(of: input.bPressed) { _, pressed in if pressed { onClose() } }
+        // NB: MENU close is handled by CartridgeShelf (which owns the
+        // toggle state). If we also listened here, both handlers would
+        // fire on the same press and cancel each other out.
     }
 
     // MARK: - Item logic
