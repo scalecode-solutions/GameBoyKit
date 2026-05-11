@@ -898,17 +898,7 @@ public struct QuestKidGame: View {
             at: CGPoint(x: 128 * scale.width, y: 122 * scale.height),
             anchor: .center
         )
-        if let letter = current.letter {
-            ctx.draw(
-                Text("LETTER: \(letter)")
-                    .font(.system(size: 7 * scale.height,
-                                  weight: .heavy,
-                                  design: .monospaced))
-                    .foregroundColor(palette.lcdShade2),
-                at: CGPoint(x: 128 * scale.width, y: 132 * scale.height),
-                anchor: .center
-            )
-        } else {
+        if current.letter == nil {
             ctx.draw(
                 Text("TUTORIAL")
                     .font(.system(size: 7 * scale.height,
