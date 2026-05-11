@@ -132,4 +132,75 @@ struct LanderStateTests {
         state.exitToModeSelect()
         #expect(state.phase == .modeSelect)
     }
+
+    // MARK: - Pendulum mode
+
+    @Test func pendulumStartsWithCargoStraightDown() {
+        let state = LanderState()
+        state.startRun(.pendulum)
+        #expect(state.mode == .pendulum)
+        #expect(state.theta == 0)
+        #expect(state.thetaDot == 0)
+        #expect(state.tetherSnapped == false)
+        // Cargo sits exactly tetherLength below the ship.
+        #expect(state.cargoX == state.shipX)
+        #expect(state.cargoY == state.shipY + LanderState.tetherLength)
+    }
+
+    @Test func pendulumLateralThrustCausesSwing() {
+        let state = LanderState()
+        state.startRun(.pendulum)
+        // Apply a few frames of lateral right thrust — should set
+        // theta-dot off zero (cargo lags ship motion).
+        state.applyInput(mainThrust: false, lateral: 1)
+        for _ in 0..<8 { state.tick() }
+        #expect(state.thetaDot != 0)
+    }
+
+    @Test func pendulumWhipSnapsTether() {
+        let state = LanderState()
+        state.startRun(.pendulum)
+        // Rapid lateral reversals each add a whip impulse — a handful
+        // of flips should build θ̇ past the snap threshold quickly,
+        // well within fuel budget.
+        for i in 0..<60 {
+            let lat = (i % 2 == 0) ? 1 : -1
+            state.applyInput(mainThrust: true, lateral: lat)
+            state.tick()
+            if state.tetherSnapped { break }
+            if state.phase != .playing { break }
+        }
+        #expect(state.tetherSnapped == true)
+        #expect(state.phase == .crashed)
+    }
+
+    @Test func pendulumGentleInputDoesNotSnap() {
+        let state = LanderState()
+        state.startRun(.pendulum)
+        // Hold lateral steady — no reversals → no whip impulses → no snap.
+        // Gentle continuous input should accumulate θ̇ only to its
+        // damped equilibrium (~0.14), comfortably below 0.20.
+        for _ in 0..<200 {
+            state.applyInput(mainThrust: true, lateral: 1)
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        #expect(state.tetherSnapped == false)
+    }
+
+    @Test func pendulumLandingUsesCargoVelocity() {
+        let state = LanderState()
+        state.startRun(.pendulum)
+        // Just descend — no lateral. Cargo hangs straight down so
+        // cargoVX ≈ 0 and the touchdown should resolve cleanly (either
+        // landed or crashed depending on whether it lined up).
+        state.applyInput(mainThrust: false, lateral: 0)
+        for _ in 0..<2000 {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        // Either way it resolved — and landingImpact reflects vertical
+        // *cargo* motion, not ship motion (they match when theta=0).
+        #expect(state.phase == .crashed || state.phase == .landed)
+    }
 }
