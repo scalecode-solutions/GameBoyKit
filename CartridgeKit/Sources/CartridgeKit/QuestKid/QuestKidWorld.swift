@@ -146,8 +146,8 @@ enum QuestKidWorld {
         hollowHalls,
         echoCaverns,
         lostLibrary,
-        boneyard
-        // Future: yewGrove
+        boneyard,
+        yewGrove
     ]
 
     /// "The Meadow" — the original 4-room overworld + dungeon arc
@@ -349,6 +349,71 @@ enum QuestKidWorld {
         keyLocation: (roomID: 4, col: 7, row: 4),    // key sits in middle bar
         bigHeartLocation: nil                         // no vault yet
     )
+
+    // MARK: - Yew Grove dungeon
+    //
+    // Letter shape (5 rows × 3 cols of rooms). Y is two arms that
+    // converge into a stem. Junctions need a horizontal bridge at the
+    // convergence row to stay grid-connected:
+    //
+    //   X . X     row 0   tops of the arms
+    //   X S X     row 1   arms + SECRET in the V of the Y
+    //   X X X     row 2   junction bar
+    //   . X .     row 3   stem
+    //   . X .     row 4   stem bottom (boss)
+    //
+    // Room IDs (reading row-major; secret room appended last):
+    //   0 . 2
+    //   1 . 3
+    //   4 5 6
+    //   . 7 .
+    //   . 8 .
+    //   9 = secret at (row 1, col 1)
+    //
+    // Player starts at room 0 (top of left arm). Boss in room 8 (stem
+    // bottom). Right arm (rooms 2, 3) is an optional pre-boss detour.
+    // Secret room (9) fills the empty V between the two arms — accessed
+    // via .secretPassage on the right wall of room 1.
+    static let yewGrove = Dungeon(
+        id: "yewgrove",
+        name: "YEW GROVE",
+        letter: "Y",
+        theme: .grove,
+        rooms: yewGroveRooms,
+        startRoomID: 0,
+        bossRoomID: 8,
+        mapDotX: 160, mapDotY: 92,    // lower-right curve of the heart
+        keyLocation: nil,
+        bigHeartLocation: (roomID: 9, col: 7, row: 3)
+    )
+
+    private static let yewGroveRooms: [Room] = [
+        // Row 0 — arm tops
+        stoneRoom(id: 0,  neighbors: [.down: 1]),                                                  // top-left arm (start)
+        // Row 1 — arms + secret
+        stoneRoom(id: 1,  neighbors: [.up: 0, .down: 4],
+                  secretNeighbors: [.right: 9],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        stoneRoom(id: 2,  neighbors: [.down: 3]),                                                  // top-right arm
+        stoneRoom(id: 3,  neighbors: [.up: 2, .down: 6],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        // Row 2 — junction bar
+        stoneRoom(id: 4,  neighbors: [.up: 1, .right: 5],
+                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),
+        stoneRoom(id: 5,  neighbors: [.left: 4, .right: 6, .down: 7]),
+        stoneRoom(id: 6,  neighbors: [.left: 5, .up: 3],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        // Row 3 — stem
+        stoneRoom(id: 7,  neighbors: [.up: 5, .down: 8],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        // Row 4 — stem bottom (boss)
+        stoneRoom(id: 8,  neighbors: [.up: 7],
+                  enemies: [EnemySpawn(kind: .boss, col: 7, row: 3)]),
+        // Secret room — empty, big-heart reward placed by Dungeon's
+        // bigHeartLocation. Returns to room 1 via its own secret passage.
+        stoneRoom(id: 9,  neighbors: [:],
+                  secretNeighbors: [.left: 1])
+    ]
 
     // MARK: - Boneyard dungeon
     //
