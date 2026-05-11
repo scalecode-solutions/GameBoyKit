@@ -283,4 +283,75 @@ struct LanderStateTests {
             #expect(pad.top < LanderState.groundY)
         }
     }
+
+    // MARK: - Cave Dive mode
+
+    @Test func caveDiveGeneratesWallsAndCenteredEntry() {
+        let state = LanderState()
+        state.startRun(.caveDive)
+        #expect(state.mode == .caveDive)
+        #expect(state.caveLeftWall.count == LanderState.caveDepth)
+        #expect(state.caveRightWall.count == LanderState.caveDepth)
+        // Ship starts centered horizontally at the top of the cave.
+        #expect(state.shipX == Double(LanderState.lcdWidth) * 0.5)
+        #expect(state.shipY == 8)
+        #expect(state.cameraY == 0)
+        // Single pad at the cave's bottom.
+        #expect(state.pads.count == 1)
+        #expect(state.currentTargetPad.top == LanderState.caveDepth - 14)
+    }
+
+    @Test func caveDiveWallsAreSanePositions() {
+        let state = LanderState()
+        state.startRun(.caveDive)
+        // The tightest design budget is 2*38 - 16 = 60px (tight middle
+        // half-width is 38, per-side wobble ±8). Assert at least 55px
+        // to give the test buffer if the wobble amplitudes ever tune.
+        for y in 0..<LanderState.caveDepth {
+            let l = state.caveLeftWall[y]
+            let r = state.caveRightWall[y]
+            #expect(l >= 0)
+            #expect(r <= LanderState.lcdWidth)
+            #expect(l < r)                                   // walls don't cross
+            #expect((r - l) >= 55)                           // ship (12px) always fits with margin
+        }
+    }
+
+    @Test func caveDiveCameraFollowsShipDownward() {
+        let state = LanderState()
+        state.startRun(.caveDive)
+        // Let gravity pull the ship down a bunch.
+        state.applyInput(mainThrust: false, lateral: 0)
+        for _ in 0..<200 {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        // Camera should have moved off zero by now (assuming the ship
+        // didn't crash on a wall immediately).
+        if state.phase == .playing {
+            #expect(state.cameraY > 0)
+        }
+    }
+
+    @Test func caveDiveHittingWallCrashes() {
+        let state = LanderState()
+        state.startRun(.caveDive)
+        // Slam lateral to the right indefinitely — the ship will
+        // eventually drift into the right wall.
+        state.applyInput(mainThrust: false, lateral: 1)
+        for _ in 0..<800 {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        #expect(state.phase == .crashed)
+    }
+
+    @Test func caveDiveSwitchingFromCaveDiveClearsWalls() {
+        let state = LanderState()
+        state.startRun(.caveDive)
+        #expect(state.caveLeftWall.isEmpty == false)
+        state.startRun(.classic)
+        #expect(state.caveLeftWall.isEmpty)
+        #expect(state.caveRightWall.isEmpty)
+    }
 }

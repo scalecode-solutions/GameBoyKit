@@ -123,24 +123,36 @@ public struct LanderGame: View {
         case .modeSelect:
             renderModeSelect(into: &ctx, scale: scale)
         case .playing:
-            renderScene(into: &ctx, scale: scale)
+            renderActiveScene(into: &ctx, scale: scale)
         case .paused:
-            renderScene(into: &ctx, scale: scale)
+            renderActiveScene(into: &ctx, scale: scale)
             renderCenteredBanner(into: &ctx, scale: scale,
                                  title: "PAUSED",
                                  subtitle: "A: RESUME")
         case .landed:
-            renderScene(into: &ctx, scale: scale)
+            renderActiveScene(into: &ctx, scale: scale)
             renderResultBanner(into: &ctx, scale: scale,
                                title: "TOUCHDOWN",
                                subtitle: "SCORE \(state.score)",
                                hint: "A: RETRY  START: MENU")
         case .crashed:
-            renderScene(into: &ctx, scale: scale)
+            renderActiveScene(into: &ctx, scale: scale)
             renderResultBanner(into: &ctx, scale: scale,
                                title: "CRASHED",
                                subtitle: String(format: "IMPACT %.2f", state.landingImpact),
                                hint: "A: RETRY  START: MENU")
+        }
+    }
+
+    /// Dispatches to the mode-appropriate scene renderer. Cave Dive
+    /// uses a completely different visual setup (vertical cave with
+    /// scrolling camera, no sky/stars/ground) so it has its own renderer;
+    /// the other modes share `renderScene`.
+    private func renderActiveScene(into ctx: inout GraphicsContext, scale: CGSize) {
+        if state.mode == .caveDive {
+            renderCaveScene(into: &ctx, scale: scale)
+        } else {
+            renderScene(into: &ctx, scale: scale)
         }
     }
 
@@ -203,36 +215,38 @@ public struct LanderGame: View {
             anchor: .center
         )
 
-        // Single-button layout for v1: a single big "control panel"
-        // button. As modes ship we'll switch this to a 2×2 grid; the
-        // navigation cursor + selection logic is already in place.
+        // Vertical stack of mode buttons. Sizing tuned for 4 modes;
+        // adding more would push into the briefing strip.
         let modes = LanderState.Mode.allCases
+        let rowHeight = 22
+        let rowGap = 4
+        let rowStartY = 22
         for (i, mode) in modes.enumerated() {
-            let yTop = 32 + i * 28
+            let yTop = rowStartY + i * (rowHeight + rowGap)
             let selected = (i == state.modeSelectCursor)
             // Button background
             ctx.fillPixel(x: 32, y: yTop,
-                          width: 192, height: 22,
+                          width: 192, height: rowHeight,
                           color: selected ? palette.lcdShade2 : palette.lcdShade1,
                           scale: scale)
             // Button outline
             ctx.fillPixel(x: 32, y: yTop, width: 192, height: 1,
                           color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: 32, y: yTop + 21, width: 192, height: 1,
+            ctx.fillPixel(x: 32, y: yTop + rowHeight - 1, width: 192, height: 1,
                           color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: 32, y: yTop, width: 1, height: 22,
+            ctx.fillPixel(x: 32, y: yTop, width: 1, height: rowHeight,
                           color: palette.lcdShade3, scale: scale)
-            ctx.fillPixel(x: 223, y: yTop, width: 1, height: 22,
+            ctx.fillPixel(x: 223, y: yTop, width: 1, height: rowHeight,
                           color: palette.lcdShade3, scale: scale)
 
             ctx.draw(
                 Text(mode.displayName)
-                    .font(.system(size: 13 * scale.height,
+                    .font(.system(size: 12 * scale.height,
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
                 at: CGPoint(x: 128 * scale.width,
-                            y: CGFloat(yTop + 11) * scale.height),
+                            y: CGFloat(yTop + rowHeight / 2) * scale.height),
                 anchor: .center
             )
         }
@@ -373,6 +387,138 @@ public struct LanderGame: View {
             if e2 >= dy { err += dy; x0 += sx }
             if e2 <= dx { err += dx; y0 += sy }
         }
+    }
+
+    // MARK: - Cave Dive scene
+
+    /// Vertical cave with a scrolling camera. Cave walls fill the
+    /// left/right of every visible row; the bottom chamber holds the
+    /// landing pad. All world-space coordinates are offset by the
+    /// camera Y before being drawn.
+    private func renderCaveScene(into ctx: inout GraphicsContext, scale: CGSize) {
+        let camY = state.cameraY
+        let depth = LanderState.caveDepth
+        let viewportH = LanderState.lcdHeight
+
+        // Rock walls — one horizontal strip per visible world row.
+        // Left rock: from x=0 to caveLeftWall[y]; right rock: from
+        // caveRightWall[y] to x=lcdWidth. The interior (between the
+        // walls) is left as the LCD background = the cave passage.
+        for screenY in 0..<viewportH {
+            let worldY = screenY + camY
+            guard worldY >= 0 && worldY < depth else {
+                // Beyond cave bottom — fill solid rock.
+                ctx.fillPixel(x: 0, y: screenY,
+                              width: LanderState.lcdWidth, height: 1,
+                              color: palette.lcdShade3, scale: scale)
+                continue
+            }
+            let lw = state.caveLeftWall[worldY]
+            let rw = state.caveRightWall[worldY]
+            if lw > 0 {
+                ctx.fillPixel(x: 0, y: screenY, width: lw, height: 1,
+                              color: palette.lcdShade3, scale: scale)
+            }
+            if rw < LanderState.lcdWidth {
+                ctx.fillPixel(x: rw, y: screenY,
+                              width: LanderState.lcdWidth - rw,
+                              height: 1,
+                              color: palette.lcdShade3, scale: scale)
+            }
+            // Faint cave wall trim — a 1px shade2 line on the rock's
+            // inner edge gives the wall a subtle defined edge against
+            // the passage background.
+            if lw > 0 && lw < LanderState.lcdWidth {
+                ctx.fillPixel(x: lw - 1, y: screenY, width: 1, height: 1,
+                              color: palette.lcdShade2, scale: scale)
+            }
+            if rw < LanderState.lcdWidth && rw > 0 {
+                ctx.fillPixel(x: rw, y: screenY, width: 1, height: 1,
+                              color: palette.lcdShade2, scale: scale)
+            }
+        }
+
+        // Landing pad — same drawPad helper, but with camera offset.
+        // Pad is in world coords; legs go DOWN to the cave's bottom
+        // (y=depth). We achieve this by drawing the pad shifted by
+        // -camY into screen space.
+        let pad = state.currentTargetPad
+        let screenPadTop = pad.top - camY
+        // Only draw if at least the pad's surface might be on screen.
+        if screenPadTop < viewportH && screenPadTop > -8 {
+            // Pad surface
+            ctx.fillPixel(x: pad.left, y: screenPadTop,
+                          width: pad.width, height: 2,
+                          color: palette.lcdShade2, scale: scale)
+            // Tick marks above the surface
+            for dx in stride(from: 2, to: pad.width - 2, by: 4) {
+                ctx.fillPixel(x: pad.left + dx, y: screenPadTop - 1,
+                              width: 2, height: 1,
+                              color: palette.lcdShade2, scale: scale)
+            }
+            // Pad legs descend to the cave bottom — drawn in a lighter
+            // shade so they read as pillars distinct from the wall rock.
+            let legBottom = min(viewportH, depth - camY)
+            ctx.fillPixel(x: pad.left + 4, y: screenPadTop + 2,
+                          width: 2, height: legBottom - (screenPadTop + 2),
+                          color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: pad.right - 6, y: screenPadTop + 2,
+                          width: 2, height: legBottom - (screenPadTop + 2),
+                          color: palette.lcdShade2, scale: scale)
+        }
+
+        // Ship — apply camera offset for rendering.
+        drawShipAtScreenSpace(into: &ctx, scale: scale,
+                              screenX: Int(state.shipX.rounded()),
+                              screenY: Int(state.shipY.rounded()) - camY)
+
+        // HUD (drawn last so it's on top)
+        drawHUD(into: &ctx, scale: scale)
+    }
+
+    /// Draws the ship sprite at an arbitrary screen-space position.
+    /// `drawShip()` reads `state.shipY` directly (assumes no camera);
+    /// Cave Dive needs the camera offset applied, so we factor the
+    /// sprite painting into a coord-agnostic version. Same pixel layout.
+    private func drawShipAtScreenSpace(
+        into ctx: inout GraphicsContext,
+        scale: CGSize,
+        screenX sx: Int,
+        screenY sy: Int
+    ) {
+        // Flame underneath when main-thrusting (2-frame anim)
+        if state.thrustingMain {
+            let flameFrame = (animTick / 3) % 2
+            let flameH = flameFrame == 0 ? 5 : 4
+            ctx.fillPixel(x: sx - 2, y: sy + 6, width: 4, height: flameH,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: sx - 1, y: sy + 6, width: 2, height: flameH + 1,
+                          color: palette.lcdShade2, scale: scale)
+        }
+        // Side-thrust puff
+        if state.thrustingLateral != 0 {
+            let side = state.thrustingLateral
+            let fx = sx + (side > 0 ? -6 : 4)
+            ctx.fillPixel(x: fx, y: sy - 1, width: 2, height: 3,
+                          color: palette.lcdShade2, scale: scale)
+        }
+        // Body
+        ctx.fillPixel(x: sx - 1, y: sy - 6, width: 2, height: 2,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: sx - 2, y: sy - 4, width: 4, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: sx - 3, y: sy - 3, width: 6, height: 6,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: sx - 1, y: sy - 1, width: 2, height: 2,
+                      color: palette.lcdShade1, scale: scale)
+        ctx.fillPixel(x: sx - 5, y: sy + 3, width: 2, height: 3,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: sx + 3, y: sy + 3, width: 2, height: 3,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: sx - 6, y: sy + 5, width: 4, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: sx + 2, y: sy + 5, width: 4, height: 1,
+                      color: palette.lcdShade3, scale: scale)
     }
 
     /// Draws a single landing pad — legs, surface, tick marks, and
@@ -581,6 +727,24 @@ public struct LanderGame: View {
                     .foregroundColor(palette.lcdShade3),
                 at: CGPoint(x: CGFloat(badgeX + badgeW / 2) * scale.width,
                             y: CGFloat(badgeY + badgeH / 2) * scale.height),
+                anchor: .center
+            )
+        }
+
+        // Cave Dive: depth readout in the HUD's center slot replaces the
+        // SAFE badge when it isn't showing. Format as DEPTH XXX/480.
+        // The SAFE badge still wins if both could draw (you only
+        // really care about depth while flying; safe-velocity is more
+        // urgent right before touchdown).
+        if state.mode == .caveDive && !state.landingWouldBeSafe {
+            let depth = max(0, Int(state.shipY))
+            ctx.draw(
+                Text("DEPTH \(depth)/\(LanderState.caveDepth)")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 162 * scale.width, y: 9 * scale.height),
                 anchor: .center
             )
         }

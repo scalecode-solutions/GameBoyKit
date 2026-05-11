@@ -44,6 +44,17 @@ public final class LanderState {
         Pad(left: 212, right: 240, top: 122)     // 3: ground level, far right
     ]
 
+    /// Cave depth (in logical pixels) for Cave Dive mode. The ship
+    /// descends through this much vertical space; camera follows.
+    /// ~6.7 screen-heights — long enough that the journey has pacing
+    /// (relaxed entry → first squeeze → breath → tight middle → wide
+    /// chamber → winding final approach → bottom chamber landing).
+    public static let caveDepth: Int = 960
+
+    /// Landing pad at the bottom of the cave. Sits inside the widened
+    /// bottom chamber so the player has a comfortable target.
+    public static let caveDivePad = Pad(left: 110, right: 150, top: caveDepth - 14)
+
     // Back-compat shims for older references to the single Classic pad.
     // New rendering code should iterate `pads` and use `currentTargetPad`.
     public static var padLeft:  Int { classicPad.left }
@@ -53,19 +64,19 @@ public final class LanderState {
 
     // MARK: - Types
 
-    /// Which mode the player is currently inside. New modes append cases
-    /// here as they ship.
+    /// Which mode the player is currently inside.
     public enum Mode: String, CaseIterable, Sendable, Codable {
         case classic
         case pendulum
         case mailRun
-        // case caveDive — coming in later iterations.
+        case caveDive
 
         public var displayName: String {
             switch self {
             case .classic:  return "CLASSIC"
             case .pendulum: return "PENDULUM"
             case .mailRun:  return "MAIL RUN"
+            case .caveDive: return "CAVE DIVE"
             }
         }
 
@@ -74,6 +85,7 @@ public final class LanderState {
             case .classic:  return "LAND ON THE PAD. SOFT TOUCH."
             case .pendulum: return "CARGO ON A TETHER. NO WHIPPING."
             case .mailRun:  return "DELIVER TO ALL PADS. BEAT THE CLOCK."
+            case .caveDive: return "DESCEND THE CAVE. AVOID THE WALLS."
             }
         }
     }
@@ -119,6 +131,14 @@ public final class LanderState {
     public private(set) var mailRunCleared: [Bool] = []
     public private(set) var timeRemainingTicks: Int = 0
 
+    // Cave Dive state — the two wall arrays (one entry per pixel of
+    // depth) plus the current camera Y offset for the scrolling viewport.
+    // Walls are generated at the start of each run so each dive has its
+    // own seed.
+    public private(set) var caveLeftWall:  [Int] = []
+    public private(set) var caveRightWall: [Int] = []
+    public private(set) var cameraY: Int = 0
+
     // Result data
     public private(set) var score: Int = 0
     public private(set) var landingImpact: Double = 0      // |vy| at touchdown
@@ -163,7 +183,7 @@ public final class LanderState {
     /// — because the cargo is what touches down.
     public var landingWouldBeSafe: Bool {
         switch mode {
-        case .classic, .mailRun:
+        case .classic, .mailRun, .caveDive:
             return abs(vy) <= landMaxVY && abs(vx) <= landMaxVX
         case .pendulum:
             return !tetherSnapped
@@ -190,11 +210,13 @@ public final class LanderState {
     // MARK: - Pads (per-mode)
 
     /// All pads visible during the current run. Classic + Pendulum use
-    /// a single pad; Mail Run uses three at varying heights.
+    /// a single pad; Mail Run uses three at varying heights; Cave Dive
+    /// uses a single pad at the bottom of the cave.
     public var pads: [Pad] {
         switch mode {
         case .classic, .pendulum: return [Self.classicPad]
         case .mailRun:            return Self.mailRunPads
+        case .caveDive:           return [Self.caveDivePad]
         }
     }
 
@@ -248,8 +270,16 @@ public final class LanderState {
     /// Begin a fresh run of the given mode.
     public func startRun(_ mode: Mode) {
         self.mode = mode
-        shipX = Double(Self.lcdWidth) * 0.18           // start near top-left
-        shipY = Double(Self.hudHeight) + 6
+        // Cave Dive starts the ship at the top of the cave (world Y=8)
+        // centered horizontally. Other modes start in the upper-left
+        // of the screen with the existing nudge.
+        if mode == .caveDive {
+            shipX = Double(Self.lcdWidth) * 0.5
+            shipY = 8
+        } else {
+            shipX = Double(Self.lcdWidth) * 0.18
+            shipY = Double(Self.hudHeight) + 6
+        }
         vx = 0                                          // no starting drift — let the player orient first
         vy = 0
         fuel = 100
@@ -265,7 +295,83 @@ public final class LanderState {
         mailRunIndex = 0
         mailRunCleared = Array(repeating: false, count: pads.count)
         timeRemainingTicks = (mode == .mailRun) ? 60 * 60 : 0   // 60s @ 60Hz
+        // Cave Dive: generate a fresh procedural cave and reset camera.
+        if mode == .caveDive {
+            generateCave()
+            cameraY = 0
+        } else {
+            caveLeftWall = []
+            caveRightWall = []
+            cameraY = 0
+        }
         phase = .playing
+    }
+
+    /// Generates a fresh procedural cave for Cave Dive mode. The
+    /// vertical descent is paced through seven width segments —
+    /// alternating tight passages and wide chambers — so the run has
+    /// rhythm rather than just "narrow → wider". Two independent sine
+    /// stacks drive the left and right walls separately, giving each
+    /// side its own organic undulation (the cave doesn't look like a
+    /// symmetric tube). Deterministic for now; a seed can be folded
+    /// in later for per-run variety.
+    private func generateCave() {
+        let depth = Self.caveDepth
+        let centerBase = Double(Self.lcdWidth) / 2
+        var left  = [Int](); left.reserveCapacity(depth)
+        var right = [Int](); right.reserveCapacity(depth)
+
+        for y in 0..<depth {
+            // Piecewise width — seven segments tuned for pacing:
+            //   0..120     open entry (wide, relaxed)
+            //   120..240   first narrowing
+            //   240..340   first squeeze (tight)
+            //   340..460   relief chamber (wide breath)
+            //   460..600   second narrowing into the tight middle
+            //   600..720   tight middle (peak difficulty)
+            //   720..820   widening
+            //   820..900   winding approach
+            //   900..960   bottom landing chamber
+            let halfWidth: Double = {
+                switch y {
+                case 0..<120:    return 105                                          // wide mouth
+                case 120..<240:  return lerp(105, 52, t: Double(y - 120) / 120)     // narrowing
+                case 240..<340:  return 52                                           // first squeeze
+                case 340..<460:  return lerp(52, 90, t: Double(y - 340) / 120)      // breath
+                case 460..<600:  return lerp(90, 38, t: Double(y - 460) / 140)      // tightening
+                case 600..<720:  return 38                                           // tight middle
+                case 720..<820:  return lerp(38, 60, t: Double(y - 720) / 100)      // widening
+                case 820..<900:  return 55                                           // winding approach
+                default:         return 80                                           // bottom chamber
+                }
+            }()
+
+            // Independent left/right wall undulation — both walls share
+            // a slow drifting centerline, but each side also has its
+            // own faster wobble so the cave breathes asymmetrically.
+            let yd = Double(y)
+            let centerDrift = sin(yd * 0.020) * 14
+                            + sin(yd * 0.041 + 1.3) * 6
+            let center = centerBase + centerDrift
+
+            // Per-side wobble adds bulges and constrictions independent
+            // of the centerline drift — gives knots and bumps in the
+            // walls without crossing the half-width budget.
+            let leftWobble  = sin(yd * 0.063 + 0.4) * 5
+                            + sin(yd * 0.110 + 2.1) * 3
+            let rightWobble = sin(yd * 0.058 + 2.7) * 5
+                            + sin(yd * 0.135 + 0.9) * 3
+
+            left.append(  Int((center - halfWidth + leftWobble).rounded()) )
+            right.append( Int((center + halfWidth + rightWobble).rounded()) )
+        }
+        caveLeftWall  = left
+        caveRightWall = right
+    }
+
+    /// Linear interpolation helper.
+    private func lerp(_ a: Double, _ b: Double, t: Double) -> Double {
+        a + (b - a) * t
     }
 
     /// After a result screen, retry the same mode.
@@ -358,6 +464,7 @@ public final class LanderState {
         case .classic:  classicTick()
         case .pendulum: pendulumTick()
         case .mailRun:  mailRunTick()
+        case .caveDive: caveDiveTick()
         }
     }
 
@@ -634,6 +741,108 @@ public final class LanderState {
     private func scoreForMailRunPartial() -> Int {
         let cleared = mailRunCleared.filter { $0 }.count
         return cleared * 500 + Int(fuel * 4)
+    }
+
+    // MARK: - Cave Dive mode tick
+
+    /// Cave Dive mode: descend through a procedurally-generated vertical
+    /// cave. Ship physics are the same as Classic; the "ground" is the
+    /// cave walls (collision = crash) and the win condition is a soft
+    /// landing on the pad sitting in the widened bottom chamber. The
+    /// camera follows the ship downward so the cave reveals itself a
+    /// screen-height at a time.
+    private func caveDiveTick() {
+        // Ship physics (gravity, thrust, fuel, integration). We DO NOT
+        // call stepShipPhysics() here because that helper has built-in
+        // horizontal wraparound + a HUD-based ceiling — neither applies
+        // in a vertical cave. So inline a Cave-Dive-shaped variant.
+
+        let mainBurns = thrustingMain && fuel > 0
+        let sideBurns = thrustingLateral != 0 && fuel > 0
+        if mainBurns { fuel = max(0, fuel - fuelBurnMain) }
+        if sideBurns { fuel = max(0, fuel - fuelBurnSide) }
+
+        vy += gravity
+        if mainBurns { vy -= thrustAccelMain }
+        if sideBurns { vx += Double(thrustingLateral) * thrustAccelSide }
+
+        if fuel <= 0 {
+            thrustingMain = false
+            thrustingLateral = 0
+        }
+
+        shipX += vx
+        shipY += vy
+
+        // Cave ceiling — bounce off the top of the world (y=0).
+        if shipY < 0 {
+            shipY = 0
+            vy = abs(vy) * ceilingBounceDamp
+        }
+
+        // Camera follows the ship downward. Once the ship is past the
+        // upper third of the viewport, the camera scrolls so the ship
+        // stays around y=cameraOffsetFromTop in screen space. Clamped
+        // so it never reveals past the cave's bottom edge.
+        let viewportAnchor: Int = 56   // ship's preferred screen Y
+        let desiredCamera = Int(shipY) - viewportAnchor
+        let maxCamera = max(0, Self.caveDepth - Self.lcdHeight)
+        cameraY = min(maxCamera, max(0, desiredCamera))
+
+        // Wall collision — sample the cave wall at the ship's depth
+        // band (we check center and a few rows around so the ship's
+        // full height counts, not just one pixel).
+        let halfWidth: Double = 6
+        let shipLeft  = shipX - halfWidth
+        let shipRight = shipX + halfWidth
+        let yLo = max(0, Int(shipY) - 5)
+        let yHi = min(Self.caveDepth - 1, Int(shipY) + 5)
+        for y in yLo...yHi {
+            let wallLeft  = Double(caveLeftWall[y])
+            let wallRight = Double(caveRightWall[y])
+            if shipLeft <= wallLeft || shipRight >= wallRight {
+                crash(impact: max(abs(vy), abs(vx)))
+                return
+            }
+        }
+
+        // Pad landing check — same shape as Classic.
+        let pad = currentTargetPad
+        let shipBottom = shipY + 6
+        if shipBottom >= Double(pad.top) {
+            let onPad = shipLeft >= Double(pad.left)
+                     && shipRight <= Double(pad.right)
+                     && shipBottom <= Double(pad.top) + 2
+            if onPad {
+                resolveCaveDiveLanding(pad: pad)
+                return
+            }
+        }
+
+        // Falling past the cave floor without hitting the pad = crash.
+        if Int(shipY) >= Self.caveDepth - 4 {
+            crash(impact: abs(vy))
+        }
+    }
+
+    private func resolveCaveDiveLanding(pad: Pad) {
+        let softVertical   = abs(vy) <= landMaxVY
+        let softHorizontal = abs(vx) <= landMaxVX
+        landingImpact = abs(vy)
+        if softVertical && softHorizontal {
+            shipY = Double(pad.top) - 6
+            vx = 0
+            vy = 0
+            // Cave Dive scoring rewards depth + softness + fuel.
+            // Reaching the pad at all is the hard part, so the base
+            // win bonus is the biggest of the three.
+            let depthBonus = Int(shipY)             // how deep you got (~480 for win)
+            score = 1800 + depthBonus + Int(fuel * 10)
+                  + max(0, Int((landMaxVY - landingImpact) * 800))
+            phase = .landed
+        } else {
+            crash(impact: abs(vy))
+        }
     }
 
     // MARK: - Shared crash
