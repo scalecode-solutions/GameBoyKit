@@ -92,10 +92,11 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         // Cartridges / shelf views inside the screen slot read these.
         .environment(\.gameBoyPalette, palette)
         .environment(\.gameBoyPowerOn, powerOn)
-        // Real DMG is ~0.61 (90 × 148mm) but we run a hair taller to give
-        // the action / system button rows breathing room and the top
-        // power-slider row a clean home above the screen.
-        .aspectRatio(0.56, contentMode: .fit)
+        // We run noticeably taller than the real DMG (~0.61) so that
+        // the controls sit closer to the bottom of the device — that
+        // puts the D-pad and A/B in natural thumb territory when the
+        // user is holding the phone, instead of forcing a reach up.
+        .aspectRatio(0.52, contentMode: .fit)
         .frame(maxWidth: 520)                         // looks right on phone & iPad
     }
 
@@ -126,7 +127,11 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 6)
 
-            Spacer(minLength: 8)
+            // Explicit screen-to-controls gap (was a flexible Spacer).
+            // The extra height from the taller chassis lands here, so
+            // the controls visibly sit lower on the device — within
+            // comfortable thumb reach for a one-handed grip.
+            Spacer(minLength: 48)
 
             // Controls row: D-pad on the left, A/B on the right.
             // D-pad is sized for fat-finger UX — virtual D-pads need
