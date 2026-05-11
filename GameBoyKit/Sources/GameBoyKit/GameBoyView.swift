@@ -86,6 +86,8 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
                 .padding(.top, 28)
                 .padding(.bottom, 24)
         }
+        // Cartridges / shelf views inside the screen slot read this.
+        .environment(\.gameBoyPalette, palette)
         // Real DMG is ~0.61 (90 × 148mm) but we run a hair taller to give
         // the action / system button rows breathing room — the tilted
         // START pill otherwise crowds the B button.

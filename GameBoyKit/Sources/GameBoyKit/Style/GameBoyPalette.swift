@@ -20,6 +20,13 @@ public struct GameBoyPalette: Sendable, Equatable {
     public var lcdBackground: Color    // dead-pixel olive
     public var lcdGlow: Color          // subtle radial tint when "on"
 
+    // Classic 4-shade DMG color ramp for in-LCD pixel drawing.
+    // Shade 0 is the lightest (typically the background), shade 3 is darkest.
+    public var lcdShade0: Color
+    public var lcdShade1: Color
+    public var lcdShade2: Color
+    public var lcdShade3: Color
+
     // Power LED
     public var ledOn: Color
     public var ledOff: Color
@@ -56,6 +63,10 @@ public struct GameBoyPalette: Sendable, Equatable {
         screenBezelEdge: Color,
         lcdBackground: Color,
         lcdGlow: Color,
+        lcdShade0: Color,
+        lcdShade1: Color,
+        lcdShade2: Color,
+        lcdShade3: Color,
         ledOn: Color,
         ledOff: Color,
         ledRing: Color,
@@ -82,6 +93,10 @@ public struct GameBoyPalette: Sendable, Equatable {
         self.screenBezelEdge = screenBezelEdge
         self.lcdBackground = lcdBackground
         self.lcdGlow = lcdGlow
+        self.lcdShade0 = lcdShade0
+        self.lcdShade1 = lcdShade1
+        self.lcdShade2 = lcdShade2
+        self.lcdShade3 = lcdShade3
         self.ledOn = ledOn
         self.ledOff = ledOff
         self.ledRing = ledRing
@@ -118,6 +133,10 @@ public extension GameBoyPalette {
 
         lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
         lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.35),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
 
         ledOn:                 Color(red: 0.92, green: 0.18, blue: 0.18),
         ledOff:                Color(red: 0.40, green: 0.10, blue: 0.10),
@@ -154,6 +173,10 @@ public extension GameBoyPalette {
 
         lcdBackground:         Color(red: 0.55, green: 0.62, blue: 0.43),
         lcdGlow:               Color(red: 0.78, green: 0.83, blue: 0.55).opacity(0.30),
+        lcdShade0:             Color(red: 0.60, green: 0.66, blue: 0.46),
+        lcdShade1:             Color(red: 0.46, green: 0.52, blue: 0.32),
+        lcdShade2:             Color(red: 0.27, green: 0.32, blue: 0.18),
+        lcdShade3:             Color(red: 0.10, green: 0.14, blue: 0.06),
 
         ledOn:                 Color(red: 0.92, green: 0.18, blue: 0.18),
         ledOff:                Color(red: 0.40, green: 0.10, blue: 0.10),
@@ -196,6 +219,10 @@ public extension GameBoyPalette {
 
         lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
         lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
 
         ledOn:                 Color(red: 1.00, green: 0.30, blue: 0.30),
         ledOff:                Color(red: 0.30, green: 0.06, blue: 0.06),
@@ -233,6 +260,10 @@ public extension GameBoyPalette {
 
         lcdBackground:         Color(red: 0.45, green: 0.55, blue: 0.32),
         lcdGlow:               Color(red: 0.65, green: 0.78, blue: 0.42).opacity(0.40),
+        lcdShade0:             Color(red: 0.52, green: 0.62, blue: 0.36),
+        lcdShade1:             Color(red: 0.38, green: 0.46, blue: 0.24),
+        lcdShade2:             Color(red: 0.22, green: 0.28, blue: 0.14),
+        lcdShade3:             Color(red: 0.08, green: 0.12, blue: 0.04),
 
         ledOn:                 Color(red: 1.00, green: 0.25, blue: 0.25),
         ledOff:                Color(red: 0.30, green: 0.06, blue: 0.06),
