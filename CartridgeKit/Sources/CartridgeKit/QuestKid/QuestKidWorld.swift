@@ -24,15 +24,19 @@ enum QuestKidLayout {
 enum TileKind: Sendable, Hashable {
     case grass          // walkable, default floor
     case sand           // walkable, lighter floor
+    case stone          // dungeon floor — walkable, dark slate
     case rock           // wall
     case tree           // wall
     case water          // wall (can't cross)
-    case door(Direction)  // walkable; triggers room transition
+    case wallDark       // dungeon wall — different visual from overworld rock
+    case door(Direction)        // walkable; triggers room transition
+    case lockedDoor(Direction)  // blocks until player has a key
 
     var isSolid: Bool {
         switch self {
-        case .grass, .sand, .door: return false
-        case .rock, .tree, .water: return true
+        case .grass, .sand, .stone, .door: return false
+        case .rock, .tree, .water, .wallDark: return true
+        case .lockedDoor: return true   // gated check happens in state with hasKey
         }
     }
 }
@@ -97,7 +101,9 @@ enum QuestKidWorld {
         room0_meadow,
         room1_grove,
         room2_clearing,
-        room3_sands
+        room3_sands,
+        room4_antechamber,
+        room5_boss
     ]
 
     /// Starting room. Exits: right → 1, down → 2.
@@ -155,7 +161,7 @@ enum QuestKidWorld {
     )
 
     /// Southeast room. Sand floor with scattered boulders.
-    /// Exits: up → 1, left → 2.
+    /// Exits: up → 1, left → 2, down → 4 (dungeon antechamber).
     static let room3_sands = Room(
         id: 3,
         tiles: build(
@@ -166,13 +172,55 @@ enum QuestKidWorld {
             "RssssssKsssssssR",
             "RsssKssssssssssR",
             "RssssssssssKsssR",
-            "RRRRRRRRRRRRRRRR"
+            "RRRRRRRDRRRRRRRR"
         ),
-        neighbors: [.up: 1, .left: 2],
+        neighbors: [.up: 1, .left: 2, .down: 4],
         enemySpawns: [
             EnemySpawn(kind: .shooter, col: 10, row: 3),
             EnemySpawn(kind: .charger, col: 5,  row: 5)
         ]
+    )
+
+    /// Dungeon Antechamber — guards on stone floor with two pillars
+    /// (rocks) and a key entity (placed by state, not tiles) in the
+    /// middle. Locked door at the bottom leads to the boss room.
+    static let room4_antechamber = Room(
+        id: 4,
+        tiles: build(
+            "WWWWWWWDWWWWWWWW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbKbbbbbbbbbbKbW",
+            "WbbbbbbbbbbbbbbW",
+            "WWWWWWWLWWWWWWWW"
+        ),
+        neighbors: [.up: 3, .down: 5],
+        enemySpawns: [
+            EnemySpawn(kind: .charger, col: 3, row: 5),
+            EnemySpawn(kind: .charger, col: 12, row: 5)
+        ]
+    )
+
+    /// Boss Room — wide stone arena with the boss in the upper half.
+    /// The top door starts as a regular door (the lock side lives in
+    /// the antechamber); after the boss dies, the state triggers the
+    /// WIN screen.
+    static let room5_boss = Room(
+        id: 5,
+        tiles: build(
+            "WWWWWWWDWWWWWWWW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WbbbbbbbbbbbbbbW",
+            "WWWWWWWWWWWWWWWW"
+        ),
+        neighbors: [.up: 4],
+        enemySpawns: [EnemySpawn(kind: .boss, col: 7, row: 2)]
     )
 
     // MARK: - Tile builder
@@ -190,14 +238,16 @@ enum QuestKidWorld {
             precondition(chars.count == QuestKidLayout.roomCols,
                          "Room row \(rowIdx) must be \(QuestKidLayout.roomCols) cols; got \(chars.count) — '\(row)'")
             for (colIdx, ch) in chars.enumerated() {
-                if ch == "D" {
+                // "D" and "L" both auto-classify by edge position
+                // (regular door vs. locked door).
+                if ch == "D" || ch == "L" {
                     let dir: Direction
                     if rowIdx == 0 { dir = .up }
                     else if rowIdx == QuestKidLayout.roomRows - 1 { dir = .down }
                     else if colIdx == 0 { dir = .left }
                     else if colIdx == QuestKidLayout.roomCols - 1 { dir = .right }
-                    else { dir = .down }  // interior fallback (we don't use)
-                    out.append(.door(dir))
+                    else { dir = .down }
+                    out.append(ch == "L" ? .lockedDoor(dir) : .door(dir))
                     continue
                 }
                 switch ch {
@@ -205,8 +255,9 @@ enum QuestKidWorld {
                 case "s": out.append(.sand)
                 case "R": out.append(.rock)
                 case "T": out.append(.tree)
-                case "W": out.append(.water)
                 case "K": out.append(.rock)
+                case "W": out.append(.wallDark)    // dungeon wall (was water)
+                case "b": out.append(.stone)        // dungeon floor
                 default:  out.append(.grass)
                 }
             }

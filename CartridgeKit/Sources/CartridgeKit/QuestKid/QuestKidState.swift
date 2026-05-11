@@ -20,6 +20,9 @@ struct Player: Sendable {
     /// Recently-applied knockback velocity (pixels/sec). Decays.
     var knockbackVX: Double = 0
     var knockbackVY: Double = 0
+    /// True after the player has picked up the dungeon key. While
+    /// true, all `.lockedDoor` tiles behave as passable doors.
+    var hasKey: Bool = false
 
     static let size: Double = 16
     static let hitboxInset: Double = 2
@@ -49,8 +52,12 @@ struct Enemy: Sendable, Identifiable {
 
     static let size: Double = 16
 
+    /// Pixel dimension of this enemy's bounding cell. Bosses are 32px;
+    /// every other enemy is 16px.
+    var dimension: Double { kind == .boss ? 32 : 16 }
+
     var hitbox: BoundingBox {
-        BoundingBox(x: x + 2, y: y + 2, w: Enemy.size - 4, h: Enemy.size - 4)
+        BoundingBox(x: x + 2, y: y + 2, w: dimension - 4, h: dimension - 4)
     }
 
     static func make(kind: EnemyKind, x: Double, y: Double) -> Enemy {
@@ -63,6 +70,9 @@ struct Enemy: Sendable, Identifiable {
         case .charger:
             return Enemy(id: UUID(), kind: kind, x: x, y: y, facing: .down, hp: 2,
                          aiTimer: 0)
+        case .boss:
+            return Enemy(id: UUID(), kind: kind, x: x, y: y, facing: .down, hp: 8,
+                         aiTimer: 1.4, shotCooldown: 2.0)
         }
     }
 }
@@ -71,6 +81,7 @@ enum EnemyKind: Sendable, Hashable {
     case octorock   // wanders randomly
     case shooter    // stationary, fires rocks toward player
     case charger    // line-of-sight pursuit, runs straight at player
+    case boss       // dungeon boss — 32×32 sprite, fan shot + charge, 8 HP
 }
 
 struct Projectile: Sendable, Identifiable {
@@ -99,6 +110,22 @@ struct HeartPickup: Sendable, Identifiable {
 
     var hitbox: BoundingBox {
         BoundingBox(x: x, y: y, w: HeartPickup.size, h: HeartPickup.size)
+    }
+}
+
+/// Persistent (no TTL) key pickup. Antechamber spawns one of these on
+/// state init. Walking over it sets `player.hasKey = true` and unlocks
+/// every `.lockedDoor` in the world.
+struct KeyPickup: Sendable, Identifiable {
+    let id: UUID
+    var x: Double
+    var y: Double
+    var bobPhase: Double = 0
+
+    static let size: Double = 10
+
+    var hitbox: BoundingBox {
+        BoundingBox(x: x, y: y, w: KeyPickup.size, h: KeyPickup.size)
     }
 }
 
@@ -137,6 +164,7 @@ final class QuestKidState {
     private(set) var enemiesPerRoom: [[Enemy]]
     private(set) var projectilesPerRoom: [[Projectile]]
     private(set) var heartsPerRoom: [[HeartPickup]]
+    private(set) var keysPerRoom: [[KeyPickup]]
 
     // MARK: Player
 
@@ -162,6 +190,18 @@ final class QuestKidState {
     static let shooterCooldown: Double = 2.4
     static let projectileSpeed: Double = 64
     static let heartDropChance: Double = 0.32
+    // Phase 3 tuning
+    static let bossSize: Double = 32
+    static let bossPaceSpeed: Double = 18
+    static let bossChargeSpeed: Double = 100
+    static let bossFanCooldown: Double = 2.4    // doubled when enraged
+    static let bossChargeCooldown: Double = 5.0
+    static let bossEnrageHPThreshold: Int = 4    // 50% of 8
+
+    /// Room ID where the dungeon key spawns.
+    static let keyRoomID: Int = 4
+    /// Room ID where the boss is fought.
+    static let bossRoomID: Int = 5
 
     init() {
         // Hydrate per-room state from spawn templates.
@@ -179,6 +219,15 @@ final class QuestKidState {
         self.enemiesPerRoom = enemies
         self.projectilesPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
         self.heartsPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        // Place a key pickup in the antechamber, on the floor between
+        // the two pillars (col 7, row 4 ≈ middle of the room).
+        var keys: [[KeyPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        keys[Self.keyRoomID] = [KeyPickup(
+            id: UUID(),
+            x: Double(7 * QuestKidLayout.tileSize) + 3,
+            y: Double(3 * QuestKidLayout.tileSize) + 3
+        )]
+        self.keysPerRoom = keys
         // Place player roughly centered in the meadow.
         self.player.x = Double((QuestKidLayout.roomCols / 2 - 1) * QuestKidLayout.tileSize)
         self.player.y = Double((QuestKidLayout.roomRows / 2 - 1) * QuestKidLayout.tileSize)
@@ -196,6 +245,10 @@ final class QuestKidState {
     var currentHearts: [HeartPickup] {
         get { heartsPerRoom[currentRoomIndex] }
         set { heartsPerRoom[currentRoomIndex] = newValue }
+    }
+    var currentKeys: [KeyPickup] {
+        get { keysPerRoom[currentRoomIndex] }
+        set { keysPerRoom[currentRoomIndex] = newValue }
     }
 
     // MARK: - Tick
@@ -278,6 +331,8 @@ final class QuestKidState {
                     }
                 }
             }
+            // Check if a boss died before filtering, so we can trigger win.
+            let bossDied = updated.contains { $0.kind == .boss && $0.hp <= 0 }
             currentEnemies = updated.filter { $0.hp > 0 }
             // Roll for heart drops at each kill site.
             var hearts = currentHearts
@@ -285,6 +340,10 @@ final class QuestKidState {
                 hearts.append(HeartPickup(id: UUID(), x: x + 3, y: y + 3))
             }
             currentHearts = hearts
+            if bossDied {
+                phase = .won
+                return
+            }
         }
 
         // 7. Enemy AI + movement + flash decay (per kind).
@@ -303,6 +362,9 @@ final class QuestKidState {
                 if let proj = tickShooter(at: i, in: &nextEnemies, dt: dt) {
                     newProjectiles.append(proj)
                 }
+            case .boss:
+                let projs = tickBoss(at: i, in: &nextEnemies, dt: dt)
+                newProjectiles.append(contentsOf: projs)
             }
         }
         currentEnemies = nextEnemies
@@ -315,6 +377,9 @@ final class QuestKidState {
 
         // 9. Heart pickup tick — bob + ttl + collect on overlap.
         tickHeartPickups(dt: dt)
+
+        // 9b. Key pickup tick — bob + collect on overlap.
+        tickKeyPickups(dt: dt)
 
         // 10. Enemy vs player contact damage.
         if player.iframes <= 0 {
@@ -393,6 +458,129 @@ final class QuestKidState {
         }
     }
 
+    /// The dungeon boss. Alternates between fan-shot (3 rocks fanning
+    /// toward player) and a straight-line charge. Both intervals shrink
+    /// when HP is at or below `bossEnrageHPThreshold`.
+    ///
+    /// Returns any projectiles fired this tick (collected by the main
+    /// loop to add to the room's projectile list).
+    private func tickBoss(at i: Int, in enemies: inout [Enemy], dt: Double) -> [Projectile] {
+        let enraged = enemies[i].hp <= Self.bossEnrageHPThreshold
+        let mul: Double = enraged ? 0.55 : 1.0
+        let bossDim = Self.bossSize
+
+        // Always face the player so the sprite reads alive.
+        let ex = enemies[i].x + bossDim / 2
+        let ey = enemies[i].y + bossDim / 2
+        let px = player.x + Player.size / 2
+        let py = player.y + Player.size / 2
+        let dxN = px - ex
+        let dyN = py - ey
+        if abs(dxN) > abs(dyN) {
+            enemies[i].facing = dxN >= 0 ? .right : .left
+        } else {
+            enemies[i].facing = dyN >= 0 ? .down : .up
+        }
+
+        // Charging? Move and check for end.
+        if enemies[i].isCharging {
+            let prevX = enemies[i].x
+            let prevY = enemies[i].y
+            let dx = enemies[i].facing.dx * Self.bossChargeSpeed * dt
+            let dy = enemies[i].facing.dy * Self.bossChargeSpeed * dt
+            moveBoss(at: i, in: &enemies, dx: dx, dy: dy)
+            enemies[i].aiTimer -= dt
+            let movedLittle = abs(enemies[i].x - prevX) < 0.5
+                && abs(enemies[i].y - prevY) < 0.5
+            if enemies[i].aiTimer <= 0 || movedLittle {
+                enemies[i].isCharging = false
+                enemies[i].aiTimer = Self.bossChargeCooldown * mul
+            }
+            return []
+        }
+
+        // Cooldowns
+        enemies[i].aiTimer -= dt
+        enemies[i].shotCooldown -= dt
+
+        // Fan-shot when shotCooldown expires
+        if enemies[i].shotCooldown <= 0 {
+            enemies[i].shotCooldown = Self.bossFanCooldown * mul
+            return makeFanShot(originX: ex, originY: ey,
+                               aimX: px,    aimY: py)
+        }
+
+        // Charge when aiTimer expires
+        if enemies[i].aiTimer <= 0 {
+            enemies[i].isCharging = true
+            // Lock in the dominant axis at the moment of commitment.
+            if abs(dxN) > abs(dyN) {
+                enemies[i].facing = dxN >= 0 ? .right : .left
+            } else {
+                enemies[i].facing = dyN >= 0 ? .down : .up
+            }
+            // Charge lasts up to ~1.4s (or until wall).
+            enemies[i].aiTimer = 1.4
+            return []
+        }
+
+        // Slow pace in the current facing while idle.
+        let dx = enemies[i].facing.dx * Self.bossPaceSpeed * dt
+        let dy = enemies[i].facing.dy * Self.bossPaceSpeed * dt
+        moveBoss(at: i, in: &enemies, dx: dx, dy: dy)
+        return []
+    }
+
+    /// 3-rock fan toward the player. The middle rock aims directly;
+    /// the flanking rocks spread out by ±25°.
+    private func makeFanShot(originX: Double, originY: Double,
+                             aimX: Double,    aimY: Double) -> [Projectile] {
+        let dx = aimX - originX
+        let dy = aimY - originY
+        let mag = max(1, (dx * dx + dy * dy).squareRoot())
+        let nx = dx / mag
+        let ny = dy / mag
+        let speed = Self.projectileSpeed
+        let spread = 25.0 * .pi / 180.0
+        func rotated(_ angle: Double) -> (Double, Double) {
+            let cosA = cos(angle), sinA = sin(angle)
+            let rx = nx * cosA - ny * sinA
+            let ry = nx * sinA + ny * cosA
+            return (rx * speed, ry * speed)
+        }
+        let (vx0, vy0) = rotated(-spread)
+        let (vx1, vy1) = rotated(0)
+        let (vx2, vy2) = rotated(spread)
+        let startX = originX - Projectile.size / 2
+        let startY = originY - Projectile.size / 2
+        return [
+            Projectile(id: UUID(), x: startX, y: startY, vx: vx0, vy: vy0),
+            Projectile(id: UUID(), x: startX, y: startY, vx: vx1, vy: vy1),
+            Projectile(id: UUID(), x: startX, y: startY, vx: vx2, vy: vy2)
+        ]
+    }
+
+    /// Boss-specific move (uses 32×32 hitbox vs 16×16 for other enemies).
+    private func moveBoss(at i: Int, in enemies: inout [Enemy], dx: Double, dy: Double) {
+        let e = enemies[i]
+        let d = Enemy.size * 2     // 32
+        let tryX = BoundingBox(x: e.x + 2 + dx, y: e.y + 2,
+                               w: d - 4, h: d - 4)
+        if !collidesWithSolids(tryX) {
+            enemies[i].x += dx
+        }
+        let tryY = BoundingBox(x: enemies[i].x + 2, y: e.y + 2 + dy,
+                               w: d - 4, h: d - 4)
+        if !collidesWithSolids(tryY) {
+            enemies[i].y += dy
+        }
+        // Clamp inside play area.
+        let maxX = Double(QuestKidLayout.playWidth)  - d
+        let maxY = Double(QuestKidLayout.playHeight) - d
+        enemies[i].x = min(max(enemies[i].x, 0), maxX)
+        enemies[i].y = min(max(enemies[i].y, 0), maxY)
+    }
+
     private func tickShooter(at i: Int, in enemies: inout [Enemy], dt: Double) -> Projectile? {
         // Shooters don't move. They just cycle the cooldown and fire at
         // the player when it's up.
@@ -451,6 +639,18 @@ final class QuestKidState {
             }
         }
         currentProjectiles = projs
+    }
+
+    private func tickKeyPickups(dt: Double) {
+        var keys = currentKeys
+        for i in keys.indices.reversed() {
+            keys[i].bobPhase += dt
+            if keys[i].hitbox.intersects(player.hitbox) {
+                player.hasKey = true
+                keys.remove(at: i)
+            }
+        }
+        currentKeys = keys
     }
 
     private func tickHeartPickups(dt: Double) {
@@ -566,10 +766,17 @@ final class QuestKidState {
         let maxRow = Int(floor((box.y + box.h - 0.001) / Double(QuestKidLayout.tileSize)))
         for r in minRow...maxRow {
             for c in minCol...maxCol {
-                if currentRoom.tile(col: c, row: r).isSolid { return true }
+                if isSolidForPlayer(currentRoom.tile(col: c, row: r)) { return true }
             }
         }
         return false
+    }
+
+    /// Locked doors are normally solid, but become passable once the
+    /// player has the key.
+    private func isSolidForPlayer(_ tile: TileKind) -> Bool {
+        if case .lockedDoor = tile, player.hasKey { return false }
+        return tile.isSolid
     }
 
     // MARK: - Room transitions
@@ -582,7 +789,21 @@ final class QuestKidState {
         let row = Int(cy / tileSize)
         guard (0..<QuestKidLayout.roomCols).contains(col),
               (0..<QuestKidLayout.roomRows).contains(row) else { return }
-        if case .door(let dir) = currentRoom.tile(col: col, row: row),
+        let tile = currentRoom.tile(col: col, row: row)
+        // Regular door
+        if case .door(let dir) = tile,
+           let neighborID = currentRoom.neighbors[dir] {
+            phase = .roomTransition(
+                from: currentRoomIndex,
+                to: neighborID,
+                progress: 0,
+                dir: dir
+            )
+            return
+        }
+        // Locked door — only passable if player has the key
+        if case .lockedDoor(let dir) = tile,
+           player.hasKey,
            let neighborID = currentRoom.neighbors[dir] {
             phase = .roomTransition(
                 from: currentRoomIndex,
@@ -628,6 +849,13 @@ final class QuestKidState {
         enemiesPerRoom = enemies
         projectilesPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
         heartsPerRoom = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        var keys: [[KeyPickup]] = Array(repeating: [], count: QuestKidWorld.rooms.count)
+        keys[Self.keyRoomID] = [KeyPickup(
+            id: UUID(),
+            x: Double(7 * QuestKidLayout.tileSize) + 3,
+            y: Double(3 * QuestKidLayout.tileSize) + 3
+        )]
+        keysPerRoom = keys
         currentRoomIndex = 0
         player = Player()
         player.x = Double((QuestKidLayout.roomCols / 2 - 1) * QuestKidLayout.tileSize)
