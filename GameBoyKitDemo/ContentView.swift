@@ -21,9 +21,9 @@ struct ContentView: View {
                             input: input,
                             cartridges: [
                                 .snake,
-                                // Placeholder rows show the menu has scale.
-                                .comingSoon(id: "breakout", title: "BREAKOUT"),
-                                .comingSoon(id: "lander",   title: "LANDER")
+                                .questKid,
+                                // Placeholder showing the menu has scale.
+                                .comingSoon(id: "lander", title: "LANDER")
                             ]
                         )
                     },
