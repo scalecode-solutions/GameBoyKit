@@ -143,8 +143,9 @@ enum QuestKidWorld {
     static let dungeons: [Dungeon] = [
         tutorialDungeon,
         serpentsCoil,
-        hollowHalls
-        // Future: echoCaverns, lostLibrary, boneyard, yewGrove
+        hollowHalls,
+        echoCaverns
+        // Future: lostLibrary, boneyard, yewGrove
     ]
 
     /// "The Meadow" — the original 4-room overworld + dungeon arc
@@ -346,6 +347,62 @@ enum QuestKidWorld {
         keyLocation: (roomID: 4, col: 7, row: 4),    // key sits in middle bar
         bigHeartLocation: nil                         // no vault yet
     )
+
+    // MARK: - Echo Caverns dungeon
+    //
+    // Letter shape (5 rows × 3 cols of rooms):
+    //
+    //   X X X     row 0   top bar
+    //   X . .     row 1   left spine
+    //   X X .     row 2   middle bar (short)
+    //   X . .     row 3   left spine
+    //   X X X     row 4   bottom bar
+    //
+    // Room IDs (reading row-major, skipping empty cells):
+    //   0 1 2
+    //   3
+    //   4 5
+    //   6
+    //   7 8 9
+    //
+    // Player starts at room 2 (top-right). Boss in room 9 (bottom-right).
+    // This routing forces the player to traverse the full spine.
+    static let echoCaverns = Dungeon(
+        id: "echocaverns",
+        name: "ECHO CAVERNS",
+        letter: "E",
+        theme: .caverns,
+        rooms: echoCavernsRooms,
+        startRoomID: 2,
+        bossRoomID: 9,
+        mapDotX: 28, mapDotY: 64,    // left side of the heart
+        keyLocation: nil,
+        bigHeartLocation: nil
+    )
+
+    private static let echoCavernsRooms: [Room] = [
+        // Row 0 — top bar
+        stoneRoom(id: 0, neighbors: [.right: 1, .down: 3]),                                         // top-left (spine top)
+        stoneRoom(id: 1, neighbors: [.left: 0, .right: 2],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        stoneRoom(id: 2, neighbors: [.left: 1]),                                                    // top-right (start)
+        // Row 1 — spine
+        stoneRoom(id: 3, neighbors: [.up: 0, .down: 4],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        // Row 2 — middle bar
+        stoneRoom(id: 4, neighbors: [.up: 3, .right: 5, .down: 6]),
+        stoneRoom(id: 5, neighbors: [.left: 4],
+                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),                          // mid-right dead-end
+        // Row 3 — spine
+        stoneRoom(id: 6, neighbors: [.up: 4, .down: 7],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        // Row 4 — bottom bar
+        stoneRoom(id: 7, neighbors: [.up: 6, .right: 8]),                                           // bottom-left (spine end)
+        stoneRoom(id: 8, neighbors: [.left: 7, .right: 9],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        stoneRoom(id: 9, neighbors: [.left: 8],
+                  enemies: [EnemySpawn(kind: .boss, col: 7, row: 3)])                              // bottom-right boss room
+    ]
 
     // MARK: - Hollow Halls dungeon
     //
