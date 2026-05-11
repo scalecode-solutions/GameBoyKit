@@ -15,19 +15,19 @@ internal struct PowerSwitch: View {
 
     @State private var hapticTrigger: Int = 0
 
-    private let trackWidth: CGFloat = 38
-    private let trackHeight: CGFloat = 12
-    private let knobWidth: CGFloat = 16
-    private let knobHeight: CGFloat = 10
+    private let trackWidth: CGFloat = 54
+    private let trackHeight: CGFloat = 17
+    private let knobWidth: CGFloat = 24
+    private let knobHeight: CGFloat = 14
 
     var body: some View {
         VStack(spacing: 2) {
             HStack(spacing: 4) {
                 // Left chassis label
                 Text("◁OFF")
-                    .font(.system(size: 6.5, weight: .heavy, design: .rounded))
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
                     .foregroundStyle(palette.subtitleColor)
-                    .tracking(0.2)
+                    .tracking(0.3)
 
                 // The track + knob
                 ZStack {
@@ -70,11 +70,11 @@ internal struct PowerSwitch: View {
                         )
                         // Three grip ridges on the knob
                         .overlay(
-                            HStack(spacing: 1.5) {
+                            HStack(spacing: 2) {
                                 ForEach(0..<3, id: \.self) { _ in
                                     Capsule()
                                         .fill(palette.systemButtonShadow)
-                                        .frame(width: 0.6, height: 4)
+                                        .frame(width: 0.8, height: 6)
                                 }
                             }
                             .opacity(0.6)
@@ -85,20 +85,20 @@ internal struct PowerSwitch: View {
 
                 // Right chassis label
                 Text("ON▷")
-                    .font(.system(size: 6.5, weight: .heavy, design: .rounded))
+                    .font(.system(size: 9, weight: .heavy, design: .rounded))
                     .foregroundStyle(palette.subtitleColor)
-                    .tracking(0.2)
+                    .tracking(0.3)
             }
 
             // POWER caption under the slider
             Text("POWER")
-                .font(.system(size: 6, weight: .black, design: .rounded))
-                .foregroundStyle(palette.subtitleColor.opacity(0.7))
-                .tracking(1.0)
+                .font(.system(size: 8, weight: .black, design: .rounded))
+                .foregroundStyle(palette.subtitleColor.opacity(0.75))
+                .tracking(1.2)
         }
-        // Expand the hit area beyond the visual so it's easy to tap.
-        .padding(.vertical, 6)
-        .padding(.horizontal, 4)
+        // Expand the hit area generously beyond the visual.
+        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
         .contentShape(Rectangle())
         .onTapGesture {
             isOn.toggle()
