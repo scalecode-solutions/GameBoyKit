@@ -90,20 +90,32 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
         let palette = resolvedPalette
         return ZStack {
             // Full-bleed face: the host's screen IS the Game Boy.
-            // Same shell gradient as before, just painting the
-            // available area edge-to-edge instead of a chassis-shaped
-            // object floating on a backdrop. No rounded corners, no
-            // outer drop shadow — the face is the surface.
+            // Same shell gradient as before, painting the available
+            // area edge-to-edge instead of a chassis-shaped object
+            // floating on a backdrop.
             //
-            // Only ignore the bottom safe area: the cream paints under
-            // the home indicator for an immersive edge-to-edge bleed,
-            // but stops cleanly at the top safe-area edge so a host
-            // NavigationStack's nav bar (with back chevron) is fully
-            // respected and never tinted by the face underneath.
-            LinearGradient(
-                colors: [palette.shellTop, palette.shellBottom],
-                startPoint: .top,
-                endPoint: .bottom
+            // Subtle rounded top corners (20pt, continuous squircle)
+            // reintroduce the "device face" reading without going
+            // back to a full chassis silhouette — the curve echoes
+            // the iPhone's own hardware corner radius so the face
+            // feels native to the device. Bottom corners stay sharp
+            // so the cream extends under the home indicator for an
+            // immersive bleed.
+            //
+            // Only ignore the bottom safe area: the top safe-area
+            // edge is respected so a host NavigationStack's nav bar
+            // (with back chevron) stays its default appearance and
+            // never gets tinted by the face underneath.
+            UnevenRoundedRectangle(
+                cornerRadii: .init(topLeading: 20, topTrailing: 20),
+                style: .continuous
+            )
+            .fill(
+                LinearGradient(
+                    colors: [palette.shellTop, palette.shellBottom],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
             .ignoresSafeArea(edges: .bottom)
 
