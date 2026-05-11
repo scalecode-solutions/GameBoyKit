@@ -142,8 +142,9 @@ enum QuestKidWorld {
     /// 0 = tutorial, 1..6 = SHELBY letter dungeons.
     static let dungeons: [Dungeon] = [
         tutorialDungeon,
-        serpentsCoil
-        // Future: hollowHalls, echoCaverns, lostLibrary, boneyard, yewGrove
+        serpentsCoil,
+        hollowHalls
+        // Future: echoCaverns, lostLibrary, boneyard, yewGrove
     ]
 
     /// "The Meadow" — the original 4-room overworld + dungeon arc
@@ -346,55 +347,101 @@ enum QuestKidWorld {
         bigHeartLocation: nil                         // no vault yet
     )
 
-    private static let serpentsCoilRooms: [Room] = [
-        // Row 0 — top bar
-        stoneRoom(id: 0, openSides: [.right, .down]),                       // top-left
-        stoneRoom(id: 1, openSides: [.left, .right]),                        // top-mid
-        stoneRoom(id: 2, openSides: [.left],
-                  enemies: [EnemySpawn(kind: .octorock, col: 8, row: 4)]),  // top-right dead-end
-        // Row 1 — left curve
-        stoneRoom(id: 3, openSides: [.up, .down],
-                  enemies: [EnemySpawn(kind: .charger, col: 8, row: 4)]),
-        // Row 2 — middle bar
-        stoneRoom(id: 4, openSides: [.up, .right]),                          // mid-left
-        stoneRoom(id: 5, openSides: [.left, .right],
-                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),    // mid-mid
-        stoneRoom(id: 6, openSides: [.left, .down]),                         // mid-right
-        // Row 3 — right curve
-        stoneRoom(id: 7, openSides: [.up, .down],
-                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
-        // Row 4 — bottom bar
-        stoneRoom(id: 8, openSides: [.right],
-                  enemies: [EnemySpawn(kind: .octorock, col: 8, row: 4)]),  // bottom-left dead-end
-        stoneRoom(id: 9, openSides: [.left, .right]),                        // bottom-mid
-        stoneRoom(id: 10, openSides: [.left, .up],
-                  enemies: [EnemySpawn(kind: .boss, col: 7, row: 3)])        // bottom-right boss room
+    // MARK: - Hollow Halls dungeon
+    //
+    // Letter shape (5 rows × 3 cols of rooms):
+    //
+    //   X.X     row 0   top of vertical bars
+    //   X.X     row 1
+    //   XXX     row 2   crossbar
+    //   X.X     row 3
+    //   X.X     row 4   bottom of vertical bars
+    //
+    // Room IDs (reading row-major, skipping empty cells):
+    //   0  -  1
+    //   2  -  3
+    //   4  5  6
+    //   7  -  8
+    //   9  -  10
+    //
+    // Player starts at room 0 (top-left). Boss is in room 10 (bottom-right).
+    static let hollowHalls = Dungeon(
+        id: "hollowhalls",
+        name: "HOLLOW HALLS",
+        letter: "H",
+        theme: .ruins,
+        rooms: hollowHallsRooms,
+        startRoomID: 0,
+        bossRoomID: 10,
+        mapDotX: 192, mapDotY: 30,    // top-right bump of the heart (mirrors S)
+        keyLocation: nil,              // no key gating for Hollow Halls
+        bigHeartLocation: nil
+    )
+
+    private static let hollowHallsRooms: [Room] = [
+        // Row 0 — top of bars
+        stoneRoom(id: 0,  neighbors: [.down: 2]),                                                  // top-left
+        stoneRoom(id: 1,  neighbors: [.down: 3]),                                                  // top-right
+        // Row 1
+        stoneRoom(id: 2,  neighbors: [.up: 0, .down: 4],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        stoneRoom(id: 3,  neighbors: [.up: 1, .down: 6],
+                  enemies: [EnemySpawn(kind: .octorock, col: 7, row: 4)]),
+        // Row 2 — crossbar
+        stoneRoom(id: 4,  neighbors: [.up: 2, .right: 5, .down: 7],
+                  enemies: [EnemySpawn(kind: .charger, col: 4, row: 4)]),
+        stoneRoom(id: 5,  neighbors: [.left: 4, .right: 6],
+                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),
+        stoneRoom(id: 6,  neighbors: [.up: 3, .left: 5, .down: 8],
+                  enemies: [EnemySpawn(kind: .charger, col: 11, row: 4)]),
+        // Row 3
+        stoneRoom(id: 7,  neighbors: [.up: 4, .down: 9]),
+        stoneRoom(id: 8,  neighbors: [.up: 6, .down: 10],
+                  enemies: [EnemySpawn(kind: .shooter, col: 7, row: 4)]),
+        // Row 4 — bottom of bars
+        stoneRoom(id: 9,  neighbors: [.up: 7],
+                  enemies: [EnemySpawn(kind: .octorock, col: 8, row: 4)]),                         // bottom-left dead-end
+        stoneRoom(id: 10, neighbors: [.up: 8],
+                  enemies: [EnemySpawn(kind: .boss, col: 7, row: 3)])                              // bottom-right boss room
     ]
 
-    /// Map of (roomID → neighbor map) for Serpent's Coil. We define
-    /// it here rather than per-room to keep the layout legible.
-    private static let serpentsCoilNeighbors: [Int: [Direction: Int]] = [
-        0:  [.right: 1, .down: 3],
-        1:  [.left: 0, .right: 2],
-        2:  [.left: 1],
-        3:  [.up: 0,   .down: 4],
-        4:  [.up: 3,   .right: 5],
-        5:  [.left: 4, .right: 6],
-        6:  [.left: 5, .down: 7],
-        7:  [.up: 6,   .down: 10],
-        8:  [.right: 9],
-        9:  [.left: 8, .right: 10],
-        10: [.left: 9, .up: 7]
+    private static let serpentsCoilRooms: [Room] = [
+        // Row 0 — top bar
+        stoneRoom(id: 0,  neighbors: [.right: 1, .down: 3]),                                       // top-left
+        stoneRoom(id: 1,  neighbors: [.left: 0, .right: 2]),                                       // top-mid
+        stoneRoom(id: 2,  neighbors: [.left: 1],
+                  enemies: [EnemySpawn(kind: .octorock, col: 8, row: 4)]),                         // top-right dead-end
+        // Row 1 — left curve
+        stoneRoom(id: 3,  neighbors: [.up: 0, .down: 4],
+                  enemies: [EnemySpawn(kind: .charger, col: 8, row: 4)]),
+        // Row 2 — middle bar
+        stoneRoom(id: 4,  neighbors: [.up: 3, .right: 5]),                                          // mid-left
+        stoneRoom(id: 5,  neighbors: [.left: 4, .right: 6],
+                  enemies: [EnemySpawn(kind: .shooter, col: 8, row: 4)]),                          // mid-mid
+        stoneRoom(id: 6,  neighbors: [.left: 5, .down: 7]),                                         // mid-right
+        // Row 3 — right curve
+        stoneRoom(id: 7,  neighbors: [.up: 6, .down: 10],
+                  enemies: [EnemySpawn(kind: .charger, col: 7, row: 4)]),
+        // Row 4 — bottom bar
+        stoneRoom(id: 8,  neighbors: [.right: 9],
+                  enemies: [EnemySpawn(kind: .octorock, col: 8, row: 4)]),                         // bottom-left dead-end
+        stoneRoom(id: 9,  neighbors: [.left: 8, .right: 10]),                                       // bottom-mid
+        stoneRoom(id: 10, neighbors: [.left: 9, .up: 7],
+                  enemies: [EnemySpawn(kind: .boss, col: 7, row: 3)])                              // bottom-right boss room
     ]
 
     /// Build a simple stone-floor dungeon room with auto-placed doors
     /// on the requested sides.  Used by the procedural letter dungeons
     /// so we don't hand-design 50+ tile arrays.
+    ///
+    /// `openSides` is derived from `neighbors.keys` — if a direction has
+    /// a neighbor, that side gets a door; otherwise it's a solid wall.
     private static func stoneRoom(
         id: Int,
-        openSides: Set<Direction>,
+        neighbors: [Direction: Int],
         enemies: [EnemySpawn] = []
     ) -> Room {
+        let openSides: Set<Direction> = Set(neighbors.keys)
         let cols = QuestKidLayout.roomCols
         let rows = QuestKidLayout.roomRows
         var tiles: [TileKind] = []
@@ -424,7 +471,7 @@ enum QuestKidWorld {
         return Room(
             id: id,
             tiles: tiles,
-            neighbors: serpentsCoilNeighbors[id] ?? [:],
+            neighbors: neighbors,
             enemySpawns: enemies
         )
     }
