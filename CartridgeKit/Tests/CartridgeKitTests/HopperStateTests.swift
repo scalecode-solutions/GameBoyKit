@@ -159,4 +159,84 @@ struct HopperStateTests {
             #expect(state.frogY == HopperState.startRow)
         }
     }
+
+    // MARK: - Endless mode
+
+    @Test func endlessStartsOneShotAtTopAndSpawnsLanes() {
+        let state = HopperState(endlessRng: HopperSeededRNG(seed: 42))
+        state.startRun(.endless)
+        #expect(state.mode == .endless)
+        #expect(state.lives == 1)
+        #expect(state.frogY == HopperState.startRow)
+        #expect(state.cameraRow == 0)
+        // Pre-fill ran from row 19 down to row -8, so lanes exist for
+        // every world row in [-8, 19].
+        let rowsCovered = Set(state.lanes.map(\.row))
+        for r in -8...HopperState.rows + 1 {
+            #expect(rowsCovered.contains(r))
+        }
+    }
+
+    @Test func endlessSpawnRowIsSafe() {
+        let state = HopperState(endlessRng: HopperSeededRNG(seed: 7))
+        state.startRun(.endless)
+        // The frog's spawn row + neighbors are forced to .safe so the
+        // first frame isn't an instant death.
+        let spawnLane = state.lanes.first { $0.row == HopperState.startRow }
+        #expect(spawnLane?.kind == .safe)
+    }
+
+    @Test func endlessCameraScrollsUpOverTime() {
+        let state = HopperState(endlessRng: HopperSeededRNG(seed: 1))
+        state.startRun(.endless)
+        let c0 = state.cameraRow
+        for _ in 0..<60 {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        // Camera should have moved up (more negative) by ~60·scrollRate.
+        if state.phase == .playing {
+            #expect(state.cameraRow < c0)
+        }
+    }
+
+    @Test func endlessFallBehindKills() {
+        let state = HopperState(endlessRng: HopperSeededRNG(seed: 2))
+        state.startRun(.endless)
+        // Don't hop. The camera will eventually scroll past the frog's
+        // row and the fellBehind branch will fire.
+        for _ in 0..<5000 {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        #expect(state.phase == .dead)
+        #expect(state.lastDeath != nil)
+    }
+
+    @Test func endlessProcgenExtendsOnDemand() {
+        let state = HopperState(endlessRng: HopperSeededRNG(seed: 3))
+        state.startRun(.endless)
+        let initialTop = state.lanes.map(\.row).min() ?? 0
+        // Tick enough for the camera to scroll several rows.
+        for _ in 0..<500 {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        let newTop = state.lanes.map(\.row).min() ?? 0
+        if state.phase == .playing {
+            #expect(newTop < initialTop)   // more rows generated above
+        }
+    }
+}
+
+/// Deterministic RNG for reproducible Endless procgen in tests.
+struct HopperSeededRNG: RandomNumberGenerator {
+    var state: UInt64
+    init(seed: UInt64) { self.state = seed == 0 ? 1 : seed }
+    mutating func next() -> UInt64 {
+        state ^= state << 13
+        state ^= state >> 7
+        state ^= state << 17
+        return state
+    }
 }

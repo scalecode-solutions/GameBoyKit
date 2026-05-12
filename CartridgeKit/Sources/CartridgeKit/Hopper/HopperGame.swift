@@ -159,6 +159,7 @@ public struct HopperGame: View {
         case .drowned:    return "DROWNED"
         case .carriedOff: return "SWEPT AWAY"
         case .timeUp:     return "TIME'S UP"
+        case .fellBehind: return "LEFT BEHIND"
         case .none:       return "SCORE \(state.score)"
         }
     }
@@ -262,10 +263,25 @@ public struct HopperGame: View {
 
     // MARK: - Play scene
 
+    /// Camera pixel offset for the current mode. Zero in Classic
+    /// (no scrolling); accumulates as the camera scrolls upward in
+    /// Endless. Subtracted from world-pixel-Y to get screen-Y.
+    private var cameraPixelOffset: Int {
+        Int((state.cameraRow * Double(HopperState.cellSize)).rounded())
+    }
+
     private func renderScene(into ctx: inout GraphicsContext, scale: CGSize) {
-        drawBackground(into: &ctx, scale: scale)
-        drawLanes(into: &ctx, scale: scale)
-        drawFrog(into: &ctx, scale: scale)
+        switch state.mode {
+        case .classic:
+            drawBackground(into: &ctx, scale: scale)
+            drawLanes(into: &ctx, scale: scale, camY: 0)
+            drawFrog(into: &ctx, scale: scale, camY: 0)
+        case .endless:
+            let camY = cameraPixelOffset
+            drawEndlessBackground(into: &ctx, scale: scale, camY: camY)
+            drawLanes(into: &ctx, scale: scale, camY: camY)
+            drawFrog(into: &ctx, scale: scale, camY: camY)
+        }
         drawHUD(into: &ctx, scale: scale)
     }
 
@@ -350,12 +366,91 @@ public struct HopperGame: View {
         }
     }
 
-    /// Draw all hazard entities (cars + logs) at their current
-    /// continuous-X positions.
-    private func drawLanes(into ctx: inout GraphicsContext, scale: CGSize) {
+    /// Paint terrain for Endless mode: every visible world row gets
+    /// painted as its lane's kind (river / road / safe grass). The
+    /// camera offset is applied per-row so scrolling is smooth.
+    private func drawEndlessBackground(
+        into ctx: inout GraphicsContext, scale: CGSize, camY: Int
+    ) {
         let cs = HopperState.cellSize
+        let totalW = HopperState.cols * cs
+        let viewportH = HopperState.rows * cs
+
+        // For every screen row, figure out which world row it
+        // corresponds to, look up the lane, and paint that row's
+        // terrain. Faster than iterating every lane in the array.
+        for screenRow in 0..<HopperState.rows {
+            let worldRow = screenRow + Int((state.cameraRow).rounded())
+            // Lane lookup — O(lanes) but lanes are small.
+            let laneIdx = state.lanes.firstIndex(where: { $0.row == worldRow })
+            let kind: HopperState.LaneKind = laneIdx.map { state.lanes[$0].kind } ?? .safe
+            let yTop = screenRow * cs - (camY - Int(state.cameraRow.rounded()) * cs)
+            // (`camY - cameraRow*cs` is the fractional pixel
+            // offset — non-zero only mid-tick. Subtracting it gives
+            // sub-cell smoothness.)
+            paintEndlessRow(into: &ctx, scale: scale,
+                            kind: kind, worldRow: worldRow,
+                            x: 0, y: yTop, w: totalW, h: cs)
+        }
+        _ = viewportH
+    }
+
+    /// Paint a single row of Endless terrain.
+    private func paintEndlessRow(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        kind: HopperState.LaneKind,
+        worldRow: Int,
+        x: Int, y: Int, w: Int, h: Int
+    ) {
+        switch kind {
+        case .safe:
+            // Grass strip.
+            ctx.fillPixel(x: x, y: y, width: w, height: h,
+                          color: palette.lcdShade2, scale: scale)
+            // Tufts — sparser than median grass to differentiate.
+            // Use worldRow to deterministically place them (no per-
+            // frame jitter).
+            let pattern = abs(worldRow * 7919) & 0x3
+            for col in stride(from: pattern + 1, to: HopperState.cols, by: 3) {
+                ctx.fillPixel(x: x + col * HopperState.cellSize + 2, y: y + 1,
+                              width: 1, height: 2,
+                              color: palette.lcdShade3, scale: scale)
+            }
+        case .road:
+            // Tarmac with a faint dashed centerline.
+            ctx.fillPixel(x: x, y: y, width: w, height: h,
+                          color: palette.lcdShade0, scale: scale)
+            let stripeY = y + h - 1
+            for col in stride(from: 0, to: HopperState.cols, by: 4) {
+                ctx.fillPixel(x: x + col * HopperState.cellSize + 1,
+                              y: stripeY, width: 2, height: 1,
+                              color: palette.lcdShade2, scale: scale)
+            }
+        case .river:
+            ctx.fillPixel(x: x, y: y, width: w, height: h,
+                          color: palette.lcdShade1, scale: scale)
+            // Sparkles — pattern depends on worldRow to avoid moving
+            // with the camera (they stay attached to the water row).
+            let stagger = (worldRow & 1) == 0
+            for col in stride(from: stagger ? 1 : 3, to: HopperState.cols, by: 4) {
+                ctx.fillPixel(x: x + col * HopperState.cellSize + 3,
+                              y: y + (stagger ? 2 : 5),
+                              width: 1, height: 1,
+                              color: palette.lcdShade2, scale: scale)
+            }
+        }
+    }
+
+    /// Draw all hazard entities (cars + logs) at their current
+    /// continuous-X positions. `camY` is subtracted from each lane's
+    /// world-Y so Endless mode scrolls smoothly; pass 0 in Classic.
+    private func drawLanes(into ctx: inout GraphicsContext, scale: CGSize, camY: Int) {
+        let cs = HopperState.cellSize
+        let viewportH = HopperState.rows * cs
         for (li, lane) in state.lanes.enumerated() {
-            let y = lane.row * cs
+            let y = lane.row * cs - camY
+            // Cull lanes entirely above/below the viewport.
+            if y + cs < 0 || y > viewportH { continue }
             for entity in state.entities[li] {
                 let px = Int((entity.x * Double(cs)).rounded())
                 let pw = lane.entityWidth * cs
@@ -377,6 +472,11 @@ public struct HopperGame: View {
         x: Int, y: Int, w: Int, h: Int
     ) {
         switch kind {
+        case .safe:
+            // Safe lanes have no entities (entityCount == 0); this
+            // branch is unreachable in practice but keeps the switch
+            // exhaustive.
+            return
         case .road:
             // Car silhouette — body + windshield strip + a 2px wheels
             // line. Variants tweak shape so adjacent lanes don't look
@@ -419,10 +519,11 @@ public struct HopperGame: View {
 
     /// Frog sprite — small body + eye dots. Position uses pixelX while
     /// riding a log so it smoothly drifts; otherwise snaps to cell X.
-    private func drawFrog(into ctx: inout GraphicsContext, scale: CGSize) {
+    /// `camY` subtracts from world-Y for Endless mode scrolling.
+    private func drawFrog(into ctx: inout GraphicsContext, scale: CGSize, camY: Int) {
         let cs = HopperState.cellSize
         let px = Int((state.frogPixelX * Double(cs)).rounded())
-        let py = state.frogY * cs
+        let py = state.frogY * cs - camY
         // Body
         ctx.fillPixel(x: px + 1, y: py + 2, width: cs - 2, height: cs - 3,
                       color: palette.lcdShade3, scale: scale)
@@ -466,22 +567,36 @@ public struct HopperGame: View {
             anchor: .center
         )
 
-        // Time (right)
-        let seconds = max(0, state.timeRemainingTicks / 60)
-        let lowTime = seconds <= 5
-        let color: Color = {
-            if !lowTime { return palette.lcdShade3 }
-            return ((animTick / 8) % 2 == 0) ? palette.lcdShade3 : palette.lcdShade1
-        }()
-        ctx.draw(
-            Text(String(format: "TIME %02d", seconds))
-                .font(.system(size: 10 * scale.height,
-                              weight: .heavy,
-                              design: .monospaced))
-                .foregroundColor(color),
-            at: CGPoint(x: CGFloat(w - 4) * scale.width, y: 8 * scale.height),
-            anchor: .trailing
-        )
+        // Right-side readout — Classic shows TIME, Endless shows ROWS climbed.
+        switch state.mode {
+        case .classic:
+            let seconds = max(0, state.timeRemainingTicks / 60)
+            let lowTime = seconds <= 5
+            let color: Color = {
+                if !lowTime { return palette.lcdShade3 }
+                return ((animTick / 8) % 2 == 0) ? palette.lcdShade3 : palette.lcdShade1
+            }()
+            ctx.draw(
+                Text(String(format: "TIME %02d", seconds))
+                    .font(.system(size: 10 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(color),
+                at: CGPoint(x: CGFloat(w - 4) * scale.width, y: 8 * scale.height),
+                anchor: .trailing
+            )
+        case .endless:
+            let climbed = max(0, HopperState.startRow - state.bestRow)
+            ctx.draw(
+                Text("ROWS \(climbed)")
+                    .font(.system(size: 10 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: CGFloat(w - 4) * scale.width, y: 8 * scale.height),
+                anchor: .trailing
+            )
+        }
     }
 
     // MARK: - Banner
