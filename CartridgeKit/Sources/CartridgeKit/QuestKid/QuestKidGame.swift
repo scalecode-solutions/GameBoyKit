@@ -2,11 +2,18 @@ import SwiftUI
 import GameBoyKit
 import ConsoleKit
 
-/// QUESTKID — a small top-down Zelda-like adventure. Hub-style
-/// dungeon select on a heart-shaped map: a tutorial dungeon at the
-/// center plus six letter-shape dungeons spelling S-H-E-L-B-Y.
-/// Sword combat, wandering enemies, hearts HUD, per-dungeon clear
-/// records, themed visuals per dungeon. Controls:
+/// WILLOW CHRONICLES — a small top-down Zelda-like adventure.
+/// "QuestKid" was the dev name during phase-1; the shipping title
+/// is "Willow Chronicles," a dedication: Shelby's name in Old Norse
+/// etymology is *Selby* (sallow / willow + by / settlement), so the
+/// title literally encodes "Chronicles of Shelby" through the
+/// language root. The cartridge id stays "questkid" to preserve
+/// any saved progress under the original key.
+///
+/// Hub-style dungeon select on a heart-shaped map: a tutorial
+/// dungeon at the center plus six letter-shape dungeons spelling
+/// S-H-E-L-B-Y. Sword combat, wandering enemies, hearts HUD,
+/// per-dungeon clear records, themed visuals per dungeon. Controls:
 ///
 /// - D-pad: walk in 4 directions
 /// - A:     swing sword
@@ -950,28 +957,42 @@ public struct QuestKidGame: View {
         ctx.fillPixel(x: 0, y: 132, width: 256, height: 12,
                       color: palette.lcdShade3, scale: scale)
 
-        // Title
+        // Title — two lines. WILLOW big and bold; CHRONICLES smaller
+        // below it. Layered for the personal-epic-fantasy register.
+        // Single-line would force a tiny font at 17 chars wide.
         ctx.draw(
-            Text("QUESTKID")
+            Text("WILLOW")
                 .font(.system(size: 26 * scale.height,
                               weight: .black,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade3),
-            at: CGPoint(x: 128 * scale.width, y: 46 * scale.height),
+            at: CGPoint(x: 128 * scale.width, y: 36 * scale.height),
             anchor: .center
         )
         ctx.draw(
-            Text("DANGEROUS TO GO ALONE.")
-                .font(.system(size: 8 * scale.height,
+            Text("CHRONICLES")
+                .font(.system(size: 18 * scale.height,
+                              weight: .heavy,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: 128 * scale.width, y: 56 * scale.height),
+            anchor: .center
+        )
+        // Tagline below the title — the deep-cut NES Zelda mistranslation
+        // hint, east/west flipped + archaic-Latin V-for-U spelling of
+        // ISTHMUS (with "MV" hidden inside ISTH-MV-S as a brand wink).
+        ctx.draw(
+            Text("WESTMOST ISTHMVS IS THE SECRET.")
+                .font(.system(size: 9 * scale.height,
                               weight: .heavy,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade2),
-            at: CGPoint(x: 128 * scale.width, y: 64 * scale.height),
+            at: CGPoint(x: 128 * scale.width, y: 76 * scale.height),
             anchor: .center
         )
 
-        // Decorative sword glyph centered below subtitle
-        renderSwordGlyph(into: &ctx, scale: scale, centerX: 128, centerY: 84)
+        // Decorative sword glyph centered below tagline.
+        renderSwordGlyph(into: &ctx, scale: scale, centerX: 128, centerY: 96)
 
         // Saved record line — shown only after the tutorial is cleared.
         if state.record.cleared["tutorial"] == true {
@@ -1343,20 +1364,28 @@ public struct QuestKidGame: View {
 // MARK: - Cartridge factory
 
 public extension GameBoyCartridge {
-    /// Built-in: QUESTKID — a small top-down Zelda-like with a
-    /// heart-shaped dungeon-select map and six letter-shape
+    /// Built-in: WILLOW CHRONICLES — a small top-down Zelda-like
+    /// with a heart-shaped dungeon-select map and six letter-shape
     /// dungeons spelling S-H-E-L-B-Y around a central tutorial.
     ///
-    /// Blurb is a deep-cut callback to the original NES Zelda's
-    /// most famous cryptic hint, "EASTMOST PENNINSULA IS THE SECRET"
-    /// — east/west flipped to match the SHELBY map, with the
-    /// archaic Latin V-for-U spelling of ISTHMUS (a peninsula's
-    /// geographic cousin) standing in for the iconic mistranslation.
-    /// "MV" is hidden inside ISTH-MV-S as a brand wink.
+    /// Title is a dedication: Shelby's name traces to Old Norse
+    /// *Selby* (sallow / willow + by / settlement), literally
+    /// "willow farm." "Willow Chronicles" encodes the dedicatee in
+    /// the language root while reading as a clean fantasy-adventure
+    /// title to anyone who doesn't know.
+    ///
+    /// Cartridge id stays "questkid" — the dev name — so any saved
+    /// progress under the original key carries over.
+    ///
+    /// Blurb is the iconic NES Zelda old-man's line that pairs with
+    /// handing the player a sword. The title screen's deep-cut
+    /// "WESTMOST ISTHMVS IS THE SECRET." complements it: shelf gets
+    /// the recognizable Zelda reference, title screen gets the
+    /// archaic-Latin-spelling deep cut.
     static let questKid = GameBoyCartridge(
         id: "questkid",
-        title: "QUESTKID",
-        blurb: "WESTMOST ISTHMVS IS THE SECRET.",
+        title: "WILLOW CHRONICLES",
+        blurb: "DANGEROUS TO GO ALONE.",
         make: { input in QuestKidGame(input: input) }
     )
 }

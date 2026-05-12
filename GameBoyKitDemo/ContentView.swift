@@ -15,8 +15,8 @@ struct ContentView: View {
                 CartridgeShelf(
                     input: input,
                     cartridges: [
+                        .questKid,    // WILLOW CHRONICLES — top of shelf as the dedication cart
                         .snake,
-                        .questKid,
                         .lander,
                         .hopper
                     ]
