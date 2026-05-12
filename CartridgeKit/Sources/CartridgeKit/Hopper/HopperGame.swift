@@ -334,7 +334,24 @@ public struct HopperGame: View {
                 drawHeadlights(into: &ctx, scale: scale, intensity: np)
             }
         }
+        // Win-celebration particles — drawn on top of the world but
+        // beneath the HUD.
+        drawParticles(into: &ctx, scale: scale)
         drawHUD(into: &ctx, scale: scale)
+    }
+
+    /// Draws each live particle. Hopper's particles live in pixel
+    /// space (not cells) so no cell-scale multiplier is needed.
+    private func drawParticles(into ctx: inout GraphicsContext, scale: CGSize) {
+        for p in state.particles.particles {
+            let alpha = min(1.0, Double(p.life) / 8.0)
+            let color = palette.lcdShade3.opacity(alpha)
+            let px = Int(p.x.rounded())
+            let py = Int(p.y.rounded())
+            let size = p.life > p.initialLife / 2 ? 2 : 1
+            ctx.fillPixel(x: px, y: py, width: size, height: size,
+                          color: color, scale: scale)
+        }
     }
 
     /// Paint the static terrain (water + median + road tarmac + start

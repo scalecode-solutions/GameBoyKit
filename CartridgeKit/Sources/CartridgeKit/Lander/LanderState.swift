@@ -152,6 +152,11 @@ public final class LanderState {
     /// `offsetX` / `offsetY` and applies them to the LCD.
     public internal(set) var cameraShake: CameraShake = CameraShake()
 
+    /// Touchdown-burst particles — spawned on each `.landed`
+    /// resolution. View draws each particle as a 1-2px speck with
+    /// alpha-fade based on remaining life.
+    public internal(set) var particles: ParticleSystem = ParticleSystem()
+
     /// Cartridge identifier used as the `CartridgeScores` key.
     public static let cartridgeId = "lander"
 
@@ -310,6 +315,8 @@ public final class LanderState {
         theta = 0
         thetaDot = 0
         tetherSnapped = false
+        // Clear leftover effects from the previous run.
+        particles.clear()
         // Mail Run: reset to first pad, full clock.
         mailRunIndex = 0
         mailRunCleared = Array(repeating: false, count: pads.count)
@@ -496,11 +503,13 @@ public final class LanderState {
     // MARK: - Tick
 
     /// Advance one physics step. The view calls this at ~60Hz every
-    /// frame — screen-shake effects advance regardless of phase so a
-    /// crash's shake completes even after the result banner appears.
-    /// Physics dispatch only fires while `.playing`.
+    /// frame — screen-shake + particle effects advance regardless of
+    /// phase so a crash's shake or a touchdown's burst completes
+    /// even after the result banner appears. Physics dispatch only
+    /// fires while `.playing`.
     public func tick() {
         cameraShake.tick()
+        particles.tick()
         guard phase == .playing else { return }
         switch mode {
         case .classic:  classicTick()
@@ -592,6 +601,7 @@ public final class LanderState {
             score = 1000 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 800))
             phase = .landed
             recordCurrentScore()
+            spawnTouchdownBurst(at: (x: shipX, y: shipY + 4))
         } else {
             crash(impact: abs(vy))
         }
@@ -679,6 +689,8 @@ public final class LanderState {
             score = 1500 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 1000))
             phase = .landed
             recordCurrentScore()
+            // Burst originates from the cargo (the actual contact point).
+            spawnTouchdownBurst(at: (x: cargoX, y: cargoY))
         } else {
             crash(impact: abs(cvy))
         }
@@ -762,6 +774,7 @@ public final class LanderState {
             score = scoreForMailRunWin()
             phase = .landed
             recordCurrentScore()
+            spawnTouchdownBurst(at: (x: shipX, y: shipY + 4))
         } else {
             // Advance to the next pad. Lift the ship just clear of
             // the pad surface so we don't immediately re-collide,
@@ -889,6 +902,7 @@ public final class LanderState {
                   + max(0, Int((landMaxVY - landingImpact) * 800))
             phase = .landed
             recordCurrentScore()
+            spawnTouchdownBurst(at: (x: shipX, y: shipY + 4))
         } else {
             crash(impact: abs(vy))
         }
@@ -916,6 +930,19 @@ public final class LanderState {
     private func recordCurrentScore() {
         isNewBest = CartridgeScores.recordIfBetter(
             score, cartridge: Self.cartridgeId, mode: mode.rawValue
+        )
+    }
+
+    /// Spawn a touchdown-celebration particle burst at `point`. Used
+    /// by each mode's .landed resolution — point varies (ship vs
+    /// cargo) so the burst originates where the actual contact was.
+    private func spawnTouchdownBurst(at point: (x: Double, y: Double)) {
+        particles.burst(
+            at: point,
+            count: 14,
+            speedRange: 0.7...1.8,
+            lifeRange: 20...32,
+            upwardBias: 0.6
         )
     }
 }

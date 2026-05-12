@@ -359,6 +359,10 @@ public struct LanderGame: View {
         // Ship
         drawShip(into: &ctx, scale: scale)
 
+        // Touchdown particles — drawn between scene and HUD so they
+        // sit on top of the world but below readouts.
+        drawParticles(into: &ctx, scale: scale, camY: 0)
+
         // HUD overlay (drawn last so it's on top)
         drawHUD(into: &ctx, scale: scale)
     }
@@ -503,6 +507,10 @@ public struct LanderGame: View {
                               screenX: Int(state.shipX.rounded()),
                               screenY: Int(state.shipY.rounded()) - camY)
 
+        // Touchdown particles — Cave Dive uses world coords so the
+        // camera offset applies to particle positions too.
+        drawParticles(into: &ctx, scale: scale, camY: camY)
+
         // HUD (drawn last so it's on top)
         drawHUD(into: &ctx, scale: scale)
     }
@@ -550,6 +558,25 @@ public struct LanderGame: View {
                       color: palette.lcdShade3, scale: scale)
         ctx.fillPixel(x: sx + 2, y: sy + 5, width: 4, height: 1,
                       color: palette.lcdShade3, scale: scale)
+    }
+
+    /// Draws each live particle as a 1×1 pixel speck (or 2×2 when
+    /// fresh) with alpha fading out over its remaining life. `camY`
+    /// applies the Cave Dive camera offset; pass 0 in other modes.
+    private func drawParticles(
+        into ctx: inout GraphicsContext, scale: CGSize, camY: Int
+    ) {
+        for p in state.particles.particles {
+            let alpha = min(1.0, Double(p.life) / 8.0)   // fade in the last 8 ticks
+            let color = palette.lcdShade3.opacity(alpha)
+            let px = Int(p.x.rounded())
+            let py = Int(p.y.rounded()) - camY
+            // Bigger speck while the particle is fresh so the initial
+            // burst has weight; tapers to 1px as it dies.
+            let size = p.life > p.initialLife / 2 ? 2 : 1
+            ctx.fillPixel(x: px, y: py, width: size, height: size,
+                          color: color, scale: scale)
+        }
     }
 
     /// Draws a single landing pad — legs, surface, tick marks, and

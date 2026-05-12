@@ -176,6 +176,10 @@ public final class HopperState {
     /// LCD.
     public internal(set) var cameraShake: CameraShake = CameraShake()
 
+    /// Win-celebration particles — sprayed at the frog's position
+    /// when it reaches the goal row.
+    public internal(set) var particles: ParticleSystem = ParticleSystem()
+
     /// Cartridge identifier used as the `CartridgeScores` key.
     public static let cartridgeId = "hopper"
 
@@ -321,6 +325,7 @@ public final class HopperState {
         lastDeath = nil
         isNewBest = false
         bestRow = Self.startRow
+        particles.clear()
         respawnFrog()
         phase = .playing
     }
@@ -637,8 +642,10 @@ public final class HopperState {
 
     public func tick() {
         // Effects tick regardless of phase so a death's screen shake
-        // completes even after the result banner appears.
+        // or a win's particle burst completes even after the result
+        // banner appears.
         cameraShake.tick()
+        particles.tick()
         guard phase == .playing else { return }
         switch mode {
         case .classic:    classicTick()
@@ -938,5 +945,15 @@ public final class HopperState {
         score += 500 + timeBonus + livesBonus
         phase = .won
         recordCurrentScore()
+        // Celebration burst at the frog's pixel position — happens
+        // on the lily pad row so the particles fan out from the bank.
+        let cs = Double(Self.cellSize)
+        particles.burst(
+            at: (x: frogPixelX * cs + cs / 2, y: Double(frogY) * cs + cs / 2),
+            count: 16,
+            speedRange: 0.8...2.2,
+            lifeRange: 22...36,
+            upwardBias: 0.8
+        )
     }
 }
