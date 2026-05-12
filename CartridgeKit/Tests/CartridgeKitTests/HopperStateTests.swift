@@ -143,6 +143,24 @@ struct HopperStateTests {
         }
     }
 
+    @Test func exitToModeSelectFromPausedSucceeds() {
+        let state = HopperState()
+        state.startRun(.classic)
+        state.togglePause()
+        #expect(state.phase == .paused)
+        state.exitToModeSelect()
+        #expect(state.phase == .modeSelect)
+    }
+
+    @Test func exitToModeSelectFromPlayingIsNoOp() {
+        let state = HopperState()
+        state.startRun(.classic)
+        let p0 = state.phase
+        state.exitToModeSelect()
+        // Still playing — the guard rejects the exit.
+        #expect(state.phase == p0)
+    }
+
     @Test func retryRestartsFromDeath() {
         let state = HopperState()
         state.startRun(.classic)

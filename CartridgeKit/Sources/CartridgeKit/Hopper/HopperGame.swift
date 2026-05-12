@@ -41,6 +41,10 @@ public struct HopperGame: View {
             guard powerOn, pressed else { return }
             handleStartPress()
         }
+        .onChange(of: input.bPressed) { _, pressed in
+            guard powerOn, pressed else { return }
+            handleBPress()
+        }
         .onChange(of: input.dpad) { _, dir in
             guard powerOn else { return }
             // Rising-edge: only fire when the previous frame had no
@@ -84,6 +88,13 @@ public struct HopperGame: View {
         case .title, .modeSelect:
             break
         }
+    }
+
+    /// B button — escape hatch from a paused run back to the
+    /// mode-select grid. Banner advertises this as "B: MENU".
+    private func handleBPress() {
+        guard state.phase == .paused else { return }
+        state.exitToModeSelect()
     }
 
     private func handleDpad(_ dir: DPadDirection) {
@@ -137,7 +148,7 @@ public struct HopperGame: View {
             renderScene(into: &ctx, scale: scale)
             renderBanner(into: &ctx, scale: scale,
                          title: "PAUSED",
-                         subtitle: "A: RESUME")
+                         subtitle: "A: RESUME  B: MENU")
         case .won:
             renderScene(into: &ctx, scale: scale)
             renderBanner(into: &ctx, scale: scale,

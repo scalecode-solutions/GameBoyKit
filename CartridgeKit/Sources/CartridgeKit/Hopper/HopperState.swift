@@ -310,8 +310,10 @@ public final class HopperState {
         startRun(mode)
     }
 
+    /// Back out to the mode-select grid from a result screen or from
+    /// a paused run (B button while paused = "MENU" in the banner).
     public func exitToModeSelect() {
-        guard phase == .dead || phase == .won else { return }
+        guard phase == .dead || phase == .won || phase == .paused else { return }
         phase = .modeSelect
     }
 
