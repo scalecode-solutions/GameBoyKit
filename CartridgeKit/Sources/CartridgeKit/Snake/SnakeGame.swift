@@ -99,6 +99,20 @@ public struct SnakeGame: View {
             anchor: .leading
         )
 
+        // BEST (right side of HUD) — all-time high for the player.
+        let best = state.bestScore
+        if best > 0 {
+            ctx.draw(
+                Text(String(format: "BEST %03d", best))
+                    .font(.system(size: 10 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 156 * scale.width, y: 12 * scale.height),
+                anchor: .leading
+            )
+        }
+
         // Mini "alive/dead" indicator on the right of HUD
         let indicatorColor: Color = {
             switch state.phase {
@@ -131,7 +145,10 @@ public struct SnakeGame: View {
         case .paused:
             renderCenteredBanner(into: &ctx, scale: scale, title: "PAUSED", subtitle: "A TO RESUME")
         case .dead:
-            renderCenteredBanner(into: &ctx, scale: scale, title: "GAME OVER", subtitle: "A: RETRY  START: MENU")
+            let subtitle = state.isNewBest
+                ? "NEW BEST!  A: RETRY"
+                : "A: RETRY  START: MENU"
+            renderCenteredBanner(into: &ctx, scale: scale, title: "GAME OVER", subtitle: subtitle)
         case .playing:
             break
         }

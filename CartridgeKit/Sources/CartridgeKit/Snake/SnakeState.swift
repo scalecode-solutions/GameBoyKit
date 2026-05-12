@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ConsoleKit
 
 /// Game state for the Snake cartridge. Pure model — no SwiftUI types —
 /// so it's straightforward to unit-test. Coordinates are in cell units
@@ -103,12 +104,12 @@ public final class SnakeState {
         // Wall collision
         if newHead.x < 0 || newHead.x >= Self.cols
             || newHead.y < Self.playRowStart || newHead.y >= Self.playRowEnd {
-            phase = .dead
+            die()
             return
         }
         // Self collision — exclude the tail because it moves out this step
         if snake.dropLast().contains(newHead) {
-            phase = .dead
+            die()
             return
         }
 
@@ -136,10 +137,39 @@ public final class SnakeState {
         score = 0
         phase = .playing
         stepInterval = 0.16
+        isNewBest = false
         spawnFood()
     }
 
+    // MARK: - High score (persisted)
+
+    /// Cartridge + mode identifiers used as the `CartridgeScores` key.
+    /// Static so the view can read the best score on game-over without
+    /// holding a state reference (e.g., during the result banner).
+    public static let cartridgeId = "snake"
+    public static let modeId      = "classic"
+
+    /// All-time best score for Snake, read from `UserDefaults` via the
+    /// shared `CartridgeScores` service. Zero on a fresh install.
+    public var bestScore: Int {
+        CartridgeScores.best(cartridge: Self.cartridgeId, mode: Self.modeId)
+    }
+
+    /// Tracks whether the just-ended run set a new best — view uses
+    /// this to flash "NEW BEST!" on the game-over banner.
+    public private(set) var isNewBest: Bool = false
+
     // MARK: - Internals
+
+    /// Centralized death path — flips phase and records the final
+    /// score to the per-cartridge best-score store if it beats the
+    /// existing record.
+    private func die() {
+        phase = .dead
+        isNewBest = CartridgeScores.recordIfBetter(
+            score, cartridge: Self.cartridgeId, mode: Self.modeId
+        )
+    }
 
     private func spawnFood() {
         // Avoid an infinite loop if the player ever fills the board.

@@ -32,6 +32,10 @@ public struct LanderGame: View {
         PixelCanvas { ctx, scale in
             render(into: &ctx, scale: scale)
         }
+        // Screen-shake offset on impacts — only applies to the LCD
+        // contents (the chassis around it stays stable).
+        .offset(x: CGFloat(state.cameraShake.offsetX),
+                y: CGFloat(state.cameraShake.offsetY))
         .onChange(of: input.aPressed) { _, pressed in
             guard powerOn, pressed else { return }
             handleAPress()
@@ -104,17 +108,18 @@ public struct LanderGame: View {
             if Task.isCancelled { return }
             animTick &+= 1
 
-            // Only step physics when actively playing.
-            guard state.phase == .playing else { continue }
-
-            // Sample held inputs.
-            let mainHeld = input.aPressed || (input.dpad?.isUp ?? false)
-            let lateral: Int = {
-                if input.dpad?.isLeft  == true { return -1 }
-                if input.dpad?.isRight == true { return  1 }
-                return 0
-            }()
-            state.applyInput(mainThrust: mainHeld, lateral: lateral)
+            // Sample inputs only while actively playing — but always
+            // tick state so screen-shake effects animate even in the
+            // result-banner phase.
+            if state.phase == .playing {
+                let mainHeld = input.aPressed || (input.dpad?.isUp ?? false)
+                let lateral: Int = {
+                    if input.dpad?.isLeft  == true { return -1 }
+                    if input.dpad?.isRight == true { return  1 }
+                    return 0
+                }()
+                state.applyInput(mainThrust: mainHeld, lateral: lateral)
+            }
             state.tick()
         }
     }
@@ -143,13 +148,13 @@ public struct LanderGame: View {
         case .landed:
             renderActiveScene(into: &ctx, scale: scale)
             renderResultBanner(into: &ctx, scale: scale,
-                               title: "TOUCHDOWN",
+                               title: state.isNewBest ? "NEW BEST!" : "TOUCHDOWN",
                                subtitle: "SCORE \(state.score)",
                                hint: "A: RETRY  START: MENU")
         case .crashed:
             renderActiveScene(into: &ctx, scale: scale)
             renderResultBanner(into: &ctx, scale: scale,
-                               title: "CRASHED",
+                               title: state.isNewBest ? "NEW BEST!" : "CRASHED",
                                subtitle: String(format: "IMPACT %.2f", state.landingImpact),
                                hint: "A: RETRY  START: MENU")
         }
@@ -196,6 +201,11 @@ public struct LanderGame: View {
             anchor: .center
         )
 
+        // Hero lander sprite hovering between the subtitle and the
+        // PRESS A pulse, with a small animated thrust flame so the
+        // title screen has some visual life.
+        drawTitleLander(into: &ctx, scale: scale, cx: 128, cy: 96)
+
         // Press-A pulse
         if (animTick / 30) % 2 == 0 {
             ctx.draw(
@@ -204,9 +214,49 @@ public struct LanderGame: View {
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: 128 * scale.width, y: 116 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 130 * scale.height),
                 anchor: .center
             )
+        }
+    }
+
+    /// Small hero lander for the title screen — body + legs + a
+    /// flickering thrust flame underneath.
+    private func drawTitleLander(
+        into ctx: inout GraphicsContext, scale: CGSize, cx: Int, cy: Int
+    ) {
+        // Cone top
+        ctx.fillPixel(x: cx - 1, y: cy - 8, width: 2, height: 2,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx - 2, y: cy - 6, width: 4, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        // Body
+        ctx.fillPixel(x: cx - 4, y: cy - 5, width: 8, height: 8,
+                      color: palette.lcdShade3, scale: scale)
+        // Cockpit
+        ctx.fillPixel(x: cx - 2, y: cy - 2, width: 4, height: 3,
+                      color: palette.lcdShade1, scale: scale)
+        // Legs
+        ctx.fillPixel(x: cx - 6, y: cy + 3, width: 2, height: 4,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx + 4, y: cy + 3, width: 2, height: 4,
+                      color: palette.lcdShade3, scale: scale)
+        // Foot pads
+        ctx.fillPixel(x: cx - 8, y: cy + 6, width: 5, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx + 3, y: cy + 6, width: 5, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+
+        // Animated thrust flame (2-frame on, 2-frame off pattern).
+        let flameFrame = animTick / 6
+        let flameH = (flameFrame % 3 == 2) ? 0 : (flameFrame % 2 == 0 ? 6 : 4)
+        if flameH > 0 {
+            ctx.fillPixel(x: cx - 3, y: cy + 7, width: 6, height: flameH,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: cx - 2, y: cy + 7, width: 4, height: flameH + 1,
+                          color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: cx - 1, y: cy + 7, width: 2, height: flameH + 2,
+                          color: palette.lcdShade1, scale: scale)
         }
     }
 
@@ -262,8 +312,11 @@ public struct LanderGame: View {
             )
         }
 
-        // Briefing strip
-        let briefing = modes[state.modeSelectCursor].briefing
+        // Briefing strip — left: mission briefing, right: persisted
+        // BEST score for the highlighted mode (hidden when zero so
+        // first-time players don't see "BEST 0").
+        let highlightedMode = modes[state.modeSelectCursor]
+        let briefing = highlightedMode.briefing
         ctx.fillPixel(x: 0, y: 128, width: LanderState.lcdWidth, height: 16,
                       color: palette.lcdShade1, scale: scale)
         ctx.draw(
@@ -272,9 +325,21 @@ public struct LanderGame: View {
                               weight: .semibold,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade3),
-            at: CGPoint(x: 128 * scale.width, y: 136 * scale.height),
-            anchor: .center
+            at: CGPoint(x: 6 * scale.width, y: 136 * scale.height),
+            anchor: .leading
         )
+        let best = state.bestScore(for: highlightedMode)
+        if best > 0 {
+            ctx.draw(
+                Text("BEST \(best)")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 250 * scale.width, y: 136 * scale.height),
+                anchor: .trailing
+            )
+        }
     }
 
     // MARK: - Play scene
@@ -338,6 +403,10 @@ public struct LanderGame: View {
 
         // Ship
         drawShip(into: &ctx, scale: scale)
+
+        // Touchdown particles — drawn between scene and HUD so they
+        // sit on top of the world but below readouts.
+        drawParticles(into: &ctx, scale: scale, camY: 0)
 
         // HUD overlay (drawn last so it's on top)
         drawHUD(into: &ctx, scale: scale)
@@ -483,6 +552,10 @@ public struct LanderGame: View {
                               screenX: Int(state.shipX.rounded()),
                               screenY: Int(state.shipY.rounded()) - camY)
 
+        // Touchdown particles — Cave Dive uses world coords so the
+        // camera offset applies to particle positions too.
+        drawParticles(into: &ctx, scale: scale, camY: camY)
+
         // HUD (drawn last so it's on top)
         drawHUD(into: &ctx, scale: scale)
     }
@@ -530,6 +603,25 @@ public struct LanderGame: View {
                       color: palette.lcdShade3, scale: scale)
         ctx.fillPixel(x: sx + 2, y: sy + 5, width: 4, height: 1,
                       color: palette.lcdShade3, scale: scale)
+    }
+
+    /// Draws each live particle as a 1×1 pixel speck (or 2×2 when
+    /// fresh) with alpha fading out over its remaining life. `camY`
+    /// applies the Cave Dive camera offset; pass 0 in other modes.
+    private func drawParticles(
+        into ctx: inout GraphicsContext, scale: CGSize, camY: Int
+    ) {
+        for p in state.particles.particles {
+            let alpha = min(1.0, Double(p.life) / 8.0)   // fade in the last 8 ticks
+            let color = palette.lcdShade3.opacity(alpha)
+            let px = Int(p.x.rounded())
+            let py = Int(p.y.rounded()) - camY
+            // Bigger speck while the particle is fresh so the initial
+            // burst has weight; tapers to 1px as it dies.
+            let size = p.life > p.initialLife / 2 ? 2 : 1
+            ctx.fillPixel(x: px, y: py, width: size, height: size,
+                          color: color, scale: scale)
+        }
     }
 
     /// Draws a single landing pad — legs, surface, tick marks, and

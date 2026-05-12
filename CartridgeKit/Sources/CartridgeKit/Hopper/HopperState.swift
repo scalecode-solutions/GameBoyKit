@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ConsoleKit
 
 /// Game state for the Hopper cartridge — the legally-distinct-but-
 /// spiritually-Frogger road & river crossing game. Pure model, no
@@ -166,6 +167,28 @@ public final class HopperState {
     public private(set) var timeRemainingTicks: Int = 0
     public private(set) var lastDeath: DeathCause? = nil
 
+    /// Whether the just-ended run set a new per-mode best — drives
+    /// the "NEW BEST!" flag on the result banner.
+    public private(set) var isNewBest: Bool = false
+
+    /// Screen-shake effect — triggered on death (car / drown / cone),
+    /// the view reads `offsetX` / `offsetY` and applies them to the
+    /// LCD.
+    public internal(set) var cameraShake: CameraShake = CameraShake()
+
+    /// Win-celebration particles — sprayed at the frog's position
+    /// when it reaches the goal row.
+    public internal(set) var particles: ParticleSystem = ParticleSystem()
+
+    /// Cartridge identifier used as the `CartridgeScores` key.
+    public static let cartridgeId = "hopper"
+
+    /// All-time best score for `mode` from the shared persistence
+    /// store. Zero on fresh install.
+    public func bestScore(for mode: Mode) -> Int {
+        CartridgeScores.best(cartridge: Self.cartridgeId, mode: mode.rawValue)
+    }
+
     /// Highest row reached (lowest Y value) during the current life —
     /// used by Endless mode scoring; harmless in Classic.
     public private(set) var bestRow: Int = 0
@@ -300,7 +323,9 @@ public final class HopperState {
         }
         score = 0
         lastDeath = nil
+        isNewBest = false
         bestRow = Self.startRow
+        particles.clear()
         respawnFrog()
         phase = .playing
     }
@@ -340,6 +365,7 @@ public final class HopperState {
         score = 0
         timeRemainingTicks = 0
         lastDeath = nil
+        isNewBest = false
         bestRow = 0
         cameraRow = 0
         endlessTopRow = 0
@@ -615,6 +641,11 @@ public final class HopperState {
     // MARK: - Tick
 
     public func tick() {
+        // Effects tick regardless of phase so a death's screen shake
+        // or a win's particle burst completes even after the result
+        // banner appears.
+        cameraShake.tick()
+        particles.tick()
         guard phase == .playing else { return }
         switch mode {
         case .classic:    classicTick()
@@ -881,11 +912,25 @@ public final class HopperState {
         }
     }
 
+    /// Persist `score` as the new per-mode best if it exceeds the
+    /// stored value, and set `isNewBest` for the result banner.
+    private func recordCurrentScore() {
+        isNewBest = CartridgeScores.recordIfBetter(
+            score, cartridge: Self.cartridgeId, mode: mode.rawValue
+        )
+    }
+
     private func die(_ cause: DeathCause) {
         lastDeath = cause
         lives -= 1
+        // Every death (fatal or respawn) shakes the screen — sells
+        // the hit. Cone-spot deaths shake a bit less than physical
+        // car/drown hits since they're surveillance-y, not crunchy.
+        let amplitude: Double = (cause == .spotted) ? 2.0 : 3.0
+        cameraShake.trigger(amplitude: amplitude, ticks: 12)
         if lives <= 0 {
             phase = .dead
+            recordCurrentScore()
         } else {
             // Brief penalty: knock 50 points off (down to zero floor)
             // and respawn at the start sidewalk.
@@ -899,5 +944,16 @@ public final class HopperState {
         let livesBonus = max(0, lives - 1) * 100   // reward unused lives
         score += 500 + timeBonus + livesBonus
         phase = .won
+        recordCurrentScore()
+        // Celebration burst at the frog's pixel position — happens
+        // on the lily pad row so the particles fan out from the bank.
+        let cs = Double(Self.cellSize)
+        particles.burst(
+            at: (x: frogPixelX * cs + cs / 2, y: Double(frogY) * cs + cs / 2),
+            count: 16,
+            speedRange: 0.8...2.2,
+            lifeRange: 22...36,
+            upwardBias: 0.8
+        )
     }
 }

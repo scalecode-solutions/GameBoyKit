@@ -33,6 +33,10 @@ public struct HopperGame: View {
         PixelCanvas { ctx, scale in
             render(into: &ctx, scale: scale)
         }
+        // Screen-shake on death events — only the LCD contents shake,
+        // the surrounding chassis stays stable.
+        .offset(x: CGFloat(state.cameraShake.offsetX),
+                y: CGFloat(state.cameraShake.offsetY))
         .onChange(of: input.aPressed) { _, pressed in
             guard powerOn, pressed else { return }
             handleAPress()
@@ -124,7 +128,9 @@ public struct HopperGame: View {
             try? await Task.sleep(for: dt)
             if Task.isCancelled { return }
             animTick &+= 1
-            guard state.phase == .playing else { continue }
+            // Always tick state so screen-shake animates even in the
+            // result phase; tick() internally guards on .playing for
+            // the gameplay dispatch.
             state.tick()
         }
     }
@@ -152,13 +158,13 @@ public struct HopperGame: View {
         case .won:
             renderScene(into: &ctx, scale: scale)
             renderBanner(into: &ctx, scale: scale,
-                         title: "SAFE!",
+                         title: state.isNewBest ? "NEW BEST!" : "SAFE!",
                          subtitle: "SCORE \(state.score)",
                          hint: "A: RETRY  START: MENU")
         case .dead:
             renderScene(into: &ctx, scale: scale)
             renderBanner(into: &ctx, scale: scale,
-                         title: "GAME OVER",
+                         title: state.isNewBest ? "NEW BEST!" : "GAME OVER",
                          subtitle: deathSubtitle(),
                          hint: "A: RETRY  START: MENU")
         }
@@ -198,6 +204,11 @@ public struct HopperGame: View {
             at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 76 * scale.height),
             anchor: .center
         )
+
+        // Hero frog on a lily pad with little animated water ripples
+        // flanking it — gives the title screen a sense of place.
+        drawTitleFrogOnLily(into: &ctx, scale: scale, cx: w / 2, cy: 100)
+
         if (animTick / 30) % 2 == 0 {
             ctx.draw(
                 Text("PRESS A")
@@ -205,9 +216,49 @@ public struct HopperGame: View {
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 116 * scale.height),
+                at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 130 * scale.height),
                 anchor: .center
             )
+        }
+    }
+
+    /// Hero frog sitting on a lily pad — title-screen decoration with
+    /// animated water ripples scrolling out from each side.
+    private func drawTitleFrogOnLily(
+        into ctx: inout GraphicsContext, scale: CGSize, cx: Int, cy: Int
+    ) {
+        // Lily pad — wide oval-ish strip.
+        ctx.fillPixel(x: cx - 9, y: cy + 1, width: 18, height: 4,
+                      color: palette.lcdShade2, scale: scale)
+        ctx.fillPixel(x: cx - 7, y: cy,     width: 14, height: 1,
+                      color: palette.lcdShade2, scale: scale)
+        ctx.fillPixel(x: cx - 7, y: cy + 5, width: 14, height: 1,
+                      color: palette.lcdShade2, scale: scale)
+        // Lily pad veins (darker accent line).
+        ctx.fillPixel(x: cx - 8, y: cy + 3, width: 16, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+
+        // Frog on top — slightly bigger than the in-game sprite so it
+        // reads at title-screen distance.
+        ctx.fillPixel(x: cx - 4, y: cy - 5, width: 8, height: 5,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx - 3, y: cy - 4, width: 6, height: 3,
+                      color: palette.lcdShade2, scale: scale)
+        // Eyes — two single pixels poking up.
+        ctx.fillPixel(x: cx - 3, y: cy - 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx + 2, y: cy - 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+
+        // Water ripples scrolling outward on each side. The ripple
+        // offset cycles every 30 ticks for a gentle pulse.
+        let ripple = (animTick / 12) % 4
+        for side in [-1, 1] {
+            let baseX = cx + side * (14 + ripple)
+            ctx.fillPixel(x: baseX, y: cy + 3, width: 2, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: baseX + side * 4, y: cy + 4, width: 2, height: 1,
+                          color: palette.lcdShade1, scale: scale)
         }
     }
 
@@ -259,7 +310,11 @@ public struct HopperGame: View {
             )
         }
 
-        let briefing = modes[state.modeSelectCursor].briefing
+        // Briefing strip — left: mission briefing, right: persisted
+        // BEST score for the highlighted mode (hidden when zero so
+        // first-time players don't see "BEST 0").
+        let highlightedMode = modes[state.modeSelectCursor]
+        let briefing = highlightedMode.briefing
         ctx.fillPixel(x: 0, y: 128, width: w, height: 16,
                       color: palette.lcdShade1, scale: scale)
         ctx.draw(
@@ -268,9 +323,21 @@ public struct HopperGame: View {
                               weight: .semibold,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade3),
-            at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 136 * scale.height),
-            anchor: .center
+            at: CGPoint(x: 6 * scale.width, y: 136 * scale.height),
+            anchor: .leading
         )
+        let best = state.bestScore(for: highlightedMode)
+        if best > 0 {
+            ctx.draw(
+                Text("BEST \(best)")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: CGFloat(w - 6) * scale.width, y: 136 * scale.height),
+                anchor: .trailing
+            )
+        }
     }
 
     // MARK: - Play scene
@@ -312,7 +379,24 @@ public struct HopperGame: View {
                 drawHeadlights(into: &ctx, scale: scale, intensity: np)
             }
         }
+        // Win-celebration particles — drawn on top of the world but
+        // beneath the HUD.
+        drawParticles(into: &ctx, scale: scale)
         drawHUD(into: &ctx, scale: scale)
+    }
+
+    /// Draws each live particle. Hopper's particles live in pixel
+    /// space (not cells) so no cell-scale multiplier is needed.
+    private func drawParticles(into ctx: inout GraphicsContext, scale: CGSize) {
+        for p in state.particles.particles {
+            let alpha = min(1.0, Double(p.life) / 8.0)
+            let color = palette.lcdShade3.opacity(alpha)
+            let px = Int(p.x.rounded())
+            let py = Int(p.y.rounded())
+            let size = p.life > p.initialLife / 2 ? 2 : 1
+            ctx.fillPixel(x: px, y: py, width: size, height: size,
+                          color: color, scale: scale)
+        }
     }
 
     /// Paint the static terrain (water + median + road tarmac + start

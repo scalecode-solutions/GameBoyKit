@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ConsoleKit
 
 /// Game state for the Lander cartridge. Pure model — no SwiftUI
 /// types — so it's straightforward to unit-test.
@@ -143,6 +144,28 @@ public final class LanderState {
     public private(set) var score: Int = 0
     public private(set) var landingImpact: Double = 0      // |vy| at touchdown
 
+    /// Whether the just-ended run set a new per-mode best — surfaced
+    /// on the result banner as "NEW BEST!".
+    public private(set) var isNewBest: Bool = false
+
+    /// Screen-shake effect — triggered on crashes; the view reads
+    /// `offsetX` / `offsetY` and applies them to the LCD.
+    public internal(set) var cameraShake: CameraShake = CameraShake()
+
+    /// Touchdown-burst particles — spawned on each `.landed`
+    /// resolution. View draws each particle as a 1-2px speck with
+    /// alpha-fade based on remaining life.
+    public internal(set) var particles: ParticleSystem = ParticleSystem()
+
+    /// Cartridge identifier used as the `CartridgeScores` key.
+    public static let cartridgeId = "lander"
+
+    /// All-time best score for `mode` from the shared persistence
+    /// store. Zero on fresh install.
+    public func bestScore(for mode: Mode) -> Int {
+        CartridgeScores.best(cartridge: Self.cartridgeId, mode: mode.rawValue)
+    }
+
     // MARK: - Tunables
 
     /// Tuning constants live as instance properties (private) so different
@@ -285,12 +308,15 @@ public final class LanderState {
         fuel = 100
         score = 0
         landingImpact = 0
+        isNewBest = false
         thrustingMain = false
         thrustingLateral = 0
         // Pendulum: cargo hangs at rest directly below the ship.
         theta = 0
         thetaDot = 0
         tetherSnapped = false
+        // Clear leftover effects from the previous run.
+        particles.clear()
         // Mail Run: reset to first pad, full clock.
         mailRunIndex = 0
         mailRunCleared = Array(repeating: false, count: pads.count)
@@ -313,13 +339,29 @@ public final class LanderState {
     /// rhythm rather than just "narrow → wider". Two independent sine
     /// stacks drive the left and right walls separately, giving each
     /// side its own organic undulation (the cave doesn't look like a
-    /// symmetric tube). Deterministic for now; a seed can be folded
-    /// in later for per-run variety.
+    /// symmetric tube).
+    ///
+    /// Per-run randomness comes from four independent phase offsets
+    /// (uniform in [0, 2π)) applied to the centerline and per-side
+    /// wobble sines. Amplitudes + frequencies stay fixed so the wall-
+    /// bounds + minimum-passage-width guarantees are preserved — only
+    /// the wave starting points change run-to-run.
     private func generateCave() {
         let depth = Self.caveDepth
         let centerBase = Double(Self.lcdWidth) / 2
         var left  = [Int](); left.reserveCapacity(depth)
         var right = [Int](); right.reserveCapacity(depth)
+
+        // Per-run sine phase offsets. Each run gets a fresh seed, so
+        // the cave's curve pattern differs while the gameplay-tuned
+        // width profile + amplitudes are preserved.
+        let twoPi = Double.pi * 2
+        let phaseCenterA = Double.random(in: 0..<twoPi)
+        let phaseCenterB = Double.random(in: 0..<twoPi)
+        let phaseLeftA   = Double.random(in: 0..<twoPi)
+        let phaseLeftB   = Double.random(in: 0..<twoPi)
+        let phaseRightA  = Double.random(in: 0..<twoPi)
+        let phaseRightB  = Double.random(in: 0..<twoPi)
 
         for y in 0..<depth {
             // Piecewise width — seven segments tuned for pacing:
@@ -349,18 +391,20 @@ public final class LanderState {
             // Independent left/right wall undulation — both walls share
             // a slow drifting centerline, but each side also has its
             // own faster wobble so the cave breathes asymmetrically.
+            // Random per-run phase offsets vary the curves between
+            // runs without changing the amplitude budget.
             let yd = Double(y)
-            let centerDrift = sin(yd * 0.020) * 14
-                            + sin(yd * 0.041 + 1.3) * 6
+            let centerDrift = sin(yd * 0.020 + phaseCenterA) * 14
+                            + sin(yd * 0.041 + phaseCenterB) * 6
             let center = centerBase + centerDrift
 
             // Per-side wobble adds bulges and constrictions independent
             // of the centerline drift — gives knots and bumps in the
             // walls without crossing the half-width budget.
-            let leftWobble  = sin(yd * 0.063 + 0.4) * 5
-                            + sin(yd * 0.110 + 2.1) * 3
-            let rightWobble = sin(yd * 0.058 + 2.7) * 5
-                            + sin(yd * 0.135 + 0.9) * 3
+            let leftWobble  = sin(yd * 0.063 + phaseLeftA) * 5
+                            + sin(yd * 0.110 + phaseLeftB) * 3
+            let rightWobble = sin(yd * 0.058 + phaseRightA) * 5
+                            + sin(yd * 0.135 + phaseRightB) * 3
 
             left.append(  Int((center - halfWidth + leftWobble).rounded()) )
             right.append( Int((center + halfWidth + rightWobble).rounded()) )
@@ -410,6 +454,7 @@ public final class LanderState {
         fuel = 100
         score = 0
         landingImpact = 0
+        isNewBest = false
         thrustingMain = false
         thrustingLateral = 0
     }
@@ -457,9 +502,14 @@ public final class LanderState {
 
     // MARK: - Tick
 
-    /// Advance one physics step. The view calls this at ~60Hz while
-    /// `.playing`. Idempotent in any other phase. Dispatches by mode.
+    /// Advance one physics step. The view calls this at ~60Hz every
+    /// frame — screen-shake + particle effects advance regardless of
+    /// phase so a crash's shake or a touchdown's burst completes
+    /// even after the result banner appears. Physics dispatch only
+    /// fires while `.playing`.
     public func tick() {
+        cameraShake.tick()
+        particles.tick()
         guard phase == .playing else { return }
         switch mode {
         case .classic:  classicTick()
@@ -550,6 +600,8 @@ public final class LanderState {
             vy = 0
             score = 1000 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 800))
             phase = .landed
+            recordCurrentScore()
+            spawnTouchdownBurst(at: (x: shipX, y: shipY + 4))
         } else {
             crash(impact: abs(vy))
         }
@@ -636,6 +688,9 @@ public final class LanderState {
             // Pendulum landing is harder than classic — reward it more.
             score = 1500 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 1000))
             phase = .landed
+            recordCurrentScore()
+            // Burst originates from the cargo (the actual contact point).
+            spawnTouchdownBurst(at: (x: cargoX, y: cargoY))
         } else {
             crash(impact: abs(cvy))
         }
@@ -664,6 +719,7 @@ public final class LanderState {
             landingImpact = 0
             score = scoreForMailRunPartial()
             phase = .crashed
+            recordCurrentScore()
             return
         }
 
@@ -687,6 +743,7 @@ public final class LanderState {
             landingImpact = abs(vy)
             score = scoreForMailRunPartial()
             phase = .crashed
+            recordCurrentScore()
         }
     }
 
@@ -701,6 +758,7 @@ public final class LanderState {
             landingImpact = abs(vy)
             score = scoreForMailRunPartial()
             phase = .crashed
+            recordCurrentScore()
             return
         }
         // Soft landing — clear this pad.
@@ -715,6 +773,8 @@ public final class LanderState {
             landingImpact = abs(vy)
             score = scoreForMailRunWin()
             phase = .landed
+            recordCurrentScore()
+            spawnTouchdownBurst(at: (x: shipX, y: shipY + 4))
         } else {
             // Advance to the next pad. Lift the ship just clear of
             // the pad surface so we don't immediately re-collide,
@@ -841,6 +901,8 @@ public final class LanderState {
             score = 1800 + depthBonus + Int(fuel * 10)
                   + max(0, Int((landMaxVY - landingImpact) * 800))
             phase = .landed
+            recordCurrentScore()
+            spawnTouchdownBurst(at: (x: shipX, y: shipY + 4))
         } else {
             crash(impact: abs(vy))
         }
@@ -854,5 +916,33 @@ public final class LanderState {
         vy = 0
         thetaDot = 0
         phase = .crashed
+        recordCurrentScore()
+        // Shake harder on harder impacts — amplitude scales linearly
+        // with impact up to a cap so a gentle whiff isn't the same as
+        // a full smash.
+        let amplitude = min(5.0, 2.0 + impact * 2.0)
+        cameraShake.trigger(amplitude: amplitude, ticks: 16)
+    }
+
+    /// Persist `score` as the new per-mode best if it exceeds the
+    /// stored value, and set `isNewBest` for the result banner to
+    /// surface. Called from every .landed / .crashed transition.
+    private func recordCurrentScore() {
+        isNewBest = CartridgeScores.recordIfBetter(
+            score, cartridge: Self.cartridgeId, mode: mode.rawValue
+        )
+    }
+
+    /// Spawn a touchdown-celebration particle burst at `point`. Used
+    /// by each mode's .landed resolution — point varies (ship vs
+    /// cargo) so the burst originates where the actual contact was.
+    private func spawnTouchdownBurst(at point: (x: Double, y: Double)) {
+        particles.burst(
+            at: point,
+            count: 14,
+            speedRange: 0.7...1.8,
+            lifeRange: 20...32,
+            upwardBias: 0.6
+        )
     }
 }
