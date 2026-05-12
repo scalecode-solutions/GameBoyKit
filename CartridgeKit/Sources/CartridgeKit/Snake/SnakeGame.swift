@@ -3,18 +3,23 @@ import GameBoyKit
 import ConsoleKit
 
 /// The Snake gameplay view. Hosts a `SnakeState` model, drives ticks
-/// while the model is in `.playing`, and renders the snake/food/HUD
-/// into a `PixelCanvas`.
+/// while the model is in `.playing`, and renders title / mode-select /
+/// snake-on-LCD / death screens into a `PixelCanvas`.
 ///
 /// Controls:
-/// - D-pad: turn (reversing into yourself is ignored)
-/// - A: pause / unpause, and retry on game-over
-/// - Start: returns to the cartridge shelf (handled by `CartridgeShelf`)
+/// - TITLE       — A: open mode select
+/// - MODE SELECT — D-pad: navigate, A: confirm
+/// - PLAYING     — D-pad: turn (reversing into yourself is ignored);
+///                 A or START: pause
+/// - PAUSED      — A or START: resume, B: back to mode select
+/// - DEAD        — A: retry, START: back to mode select
 public struct SnakeGame: View {
 
     public let input: GameBoyInput
     @State private var state: SnakeState
     @State private var resetCounter: Int = 0   // bumps when we want to restart the task
+    @State private var animTick: Int = 0       // 60Hz counter for title pulses
+    @State private var lastDpad: DPadDirection? = nil
     @Environment(\.gameBoyPalette) private var palette
     @Environment(\.gameBoyPowerOn) private var powerOn
 
@@ -27,13 +32,26 @@ public struct SnakeGame: View {
         PixelCanvas { ctx, scale in
             render(into: &ctx, scale: scale)
         }
+        // Screen-shake on death + smasher impacts — only the LCD
+        // contents shake, the surrounding chassis stays stable.
+        .offset(x: CGFloat(state.cameraShake.offsetX),
+                y: CGFloat(state.cameraShake.offsetY))
         .onChange(of: input.dpad) { _, dir in
             guard powerOn else { return }
-            handleDirection(dir)
+            handleDpad(dir)
+            lastDpad = dir
         }
         .onChange(of: input.aPressed) { _, pressed in
             guard powerOn, pressed else { return }
-            handleA()
+            handleAPress()
+        }
+        .onChange(of: input.startPressed) { _, pressed in
+            guard powerOn, pressed else { return }
+            handleStartPress()
+        }
+        .onChange(of: input.bPressed) { _, pressed in
+            guard powerOn, pressed else { return }
+            handleBPress()
         }
         // Including powerOn in the id cancels the loop when off and
         // restarts it (with a fresh sleep) when on.
@@ -41,32 +59,73 @@ public struct SnakeGame: View {
             guard powerOn else { return }
             await runTickLoop()
         }
+        .task(id: "anim-\(powerOn)") {
+            guard powerOn else { return }
+            await runAnimLoop()
+        }
     }
 
     // MARK: - Input
 
-    private func handleDirection(_ dir: DPadDirection?) {
+    private func handleDpad(_ dir: DPadDirection?) {
         guard let dir else { return }
-        if dir.isUp        { state.turn(.up) }
-        else if dir.isDown  { state.turn(.down) }
-        else if dir.isLeft  { state.turn(.left) }
-        else if dir.isRight { state.turn(.right) }
+        switch state.phase {
+        case .modeSelect:
+            // Rising-edge — only fire on a fresh press so the cursor
+            // doesn't whip on diagonal transitions.
+            guard lastDpad == nil else { return }
+            if dir.isUp        { state.moveModeSelectCursor(-1) }
+            else if dir.isDown { state.moveModeSelectCursor( 1) }
+        case .playing:
+            if dir.isUp        { state.turn(.up) }
+            else if dir.isDown  { state.turn(.down) }
+            else if dir.isLeft  { state.turn(.left) }
+            else if dir.isRight { state.turn(.right) }
+        default:
+            break
+        }
     }
 
-    private func handleA() {
+    private func handleAPress() {
+        switch state.phase {
+        case .title:
+            state.openModeSelect()
+        case .modeSelect:
+            state.confirmModeSelection()
+            resetCounter &+= 1
+        case .playing, .paused:
+            state.togglePause()
+        case .dead:
+            state.retryRun()
+            resetCounter &+= 1
+        }
+    }
+
+    private func handleStartPress() {
         switch state.phase {
         case .playing, .paused:
             state.togglePause()
         case .dead:
-            state.reset()
-            resetCounter &+= 1     // re-launches the tick loop
+            state.exitToModeSelect()
+        case .title, .modeSelect:
+            break
         }
+    }
+
+    /// B button — escape hatch from a paused run back to the mode-
+    /// select grid. Banner advertises this as "B: MENU".
+    private func handleBPress() {
+        guard state.phase == .paused else { return }
+        state.exitToModeSelect()
     }
 
     // MARK: - Tick loop
 
+    /// Snake's game tick runs at the variable `state.stepInterval`
+    /// (starts at ~6Hz, speeds up). The separate anim loop below
+    /// runs at 60Hz so title pulses can animate smoothly while the
+    /// game tick is slow / paused.
     private func runTickLoop() async {
-        // Sleep first so the player has a beat to orient after load/reset.
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(state.stepInterval))
             if Task.isCancelled { return }
@@ -75,12 +134,192 @@ public struct SnakeGame: View {
         }
     }
 
+    private func runAnimLoop() async {
+        let dt: Duration = .milliseconds(16)
+        while !Task.isCancelled {
+            try? await Task.sleep(for: dt)
+            if Task.isCancelled { return }
+            animTick &+= 1
+            state.bumpAnimationTick()
+        }
+    }
+
     // MARK: - Rendering
 
     private func render(into ctx: inout GraphicsContext, scale: CGSize) {
-        // Background
         ctx.fillPixel(x: 0, y: 0, width: 256, height: 144,
                       color: palette.lcdShade0, scale: scale)
+
+        switch state.phase {
+        case .title:
+            renderTitle(into: &ctx, scale: scale)
+        case .modeSelect:
+            renderModeSelect(into: &ctx, scale: scale)
+        case .playing, .paused, .dead:
+            renderGame(into: &ctx, scale: scale)
+        }
+    }
+
+    // MARK: - Title
+
+    private func renderTitle(into ctx: inout GraphicsContext, scale: CGSize) {
+        // Title
+        ctx.draw(
+            Text("SNAKE")
+                .font(.system(size: 30 * scale.height,
+                              weight: .black,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: 128 * scale.width, y: 52 * scale.height),
+            anchor: .center
+        )
+
+        // Hero snake sprite — a coiled little serpent below the title.
+        drawTitleSnake(into: &ctx, scale: scale, cx: 128, cy: 92)
+
+        // PRESS A pulse
+        if (animTick / 30) % 2 == 0 {
+            ctx.draw(
+                Text("PRESS A")
+                    .font(.system(size: 11 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 128 * scale.width, y: 128 * scale.height),
+                anchor: .center
+            )
+        }
+    }
+
+    /// Coiled snake sprite for the title screen — head + body curling
+    /// through a small spiral, drawn with a darker outline.
+    private func drawTitleSnake(
+        into ctx: inout GraphicsContext, scale: CGSize, cx: Int, cy: Int
+    ) {
+        // Tail-end segments curving in from the right.
+        let segments: [(Int, Int)] = [
+            (cx + 14, cy + 4),
+            (cx + 10, cy + 4),
+            (cx + 6,  cy + 4),
+            (cx + 2,  cy + 4),
+            (cx - 2,  cy + 4),
+            (cx - 6,  cy + 4),
+            (cx - 10, cy + 2),
+            (cx - 10, cy - 2),
+            (cx - 6,  cy - 4),
+            (cx - 2,  cy - 4),
+            (cx + 2,  cy - 4),
+            (cx + 6,  cy - 4),
+        ]
+        for (x, y) in segments {
+            ctx.fillPixel(x: x, y: y, width: 4, height: 4,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 1, width: 2, height: 2,
+                          color: palette.lcdShade2, scale: scale)
+        }
+        // Head at the right end of the upper coil.
+        let hx = cx + 10, hy = cy - 4
+        ctx.fillPixel(x: hx, y: hy, width: 5, height: 4,
+                      color: palette.lcdShade3, scale: scale)
+        // Eye
+        ctx.fillPixel(x: hx + 3, y: hy + 1, width: 1, height: 1,
+                      color: palette.lcdShade0, scale: scale)
+        // Tongue flick (animated)
+        if (animTick / 18) % 3 != 2 {
+            ctx.fillPixel(x: hx + 5, y: hy + 2, width: 2, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+        }
+    }
+
+    // MARK: - Mode select
+
+    private func renderModeSelect(into ctx: inout GraphicsContext, scale: CGSize) {
+        // Title bar
+        ctx.fillPixel(x: 0, y: 0, width: 256, height: 16,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.draw(
+            Text("SELECT MODE")
+                .font(.system(size: 11 * scale.height,
+                              weight: .heavy,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade0),
+            at: CGPoint(x: 128 * scale.width, y: 8 * scale.height),
+            anchor: .center
+        )
+
+        // Vertical stack of mode buttons.
+        let modes = SnakeState.Mode.allCases
+        let rowHeight = 22
+        let rowGap = 4
+        let rowStartY = 26
+        for (i, m) in modes.enumerated() {
+            let yTop = rowStartY + i * (rowHeight + rowGap)
+            let selected = (i == state.modeSelectCursor)
+            ctx.fillPixel(x: 32, y: yTop, width: 192, height: rowHeight,
+                          color: selected ? palette.lcdShade2 : palette.lcdShade1,
+                          scale: scale)
+            ctx.fillPixel(x: 32, y: yTop, width: 192, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: 32, y: yTop + rowHeight - 1, width: 192, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: 32, y: yTop, width: 1, height: rowHeight,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: 223, y: yTop, width: 1, height: rowHeight,
+                          color: palette.lcdShade3, scale: scale)
+
+            ctx.draw(
+                Text(m.displayName)
+                    .font(.system(size: 12 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 128 * scale.width,
+                            y: CGFloat(yTop + rowHeight / 2) * scale.height),
+                anchor: .center
+            )
+        }
+
+        // Briefing strip — left: pitch, right: BEST score for highlighted mode.
+        let highlighted = modes[state.modeSelectCursor]
+        ctx.fillPixel(x: 0, y: 128, width: 256, height: 16,
+                      color: palette.lcdShade1, scale: scale)
+        ctx.draw(
+            Text(highlighted.briefing)
+                .font(.system(size: 9 * scale.height,
+                              weight: .semibold,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: 6 * scale.width, y: 136 * scale.height),
+            anchor: .leading
+        )
+        let best = state.bestScore(for: highlighted)
+        if best > 0 {
+            ctx.draw(
+                Text("BEST \(best)")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 250 * scale.width, y: 136 * scale.height),
+                anchor: .trailing
+            )
+        }
+    }
+
+    // MARK: - Gameplay scene
+
+    private func renderGame(into ctx: inout GraphicsContext, scale: CGSize) {
+        // Side-map background tint: a sparse dot pattern in shade1 so
+        // the player can tell at a glance which room they're in.
+        if state.mode.hasPortals && state.inSideMap {
+            for row in stride(from: SnakeState.playRowStart, to: SnakeState.playRowEnd, by: 2) {
+                for col in stride(from: row % 4, to: SnakeState.cols, by: 4) {
+                    ctx.fillPixel(x: col * 8 + 3, y: row * 8 + 3,
+                                  width: 2, height: 2,
+                                  color: palette.lcdShade1, scale: scale)
+                }
+            }
+        }
 
         // HUD bar (top 24 px = 3 cells)
         ctx.fillPixel(x: 0, y: 0, width: 256, height: 23,
@@ -99,8 +338,8 @@ public struct SnakeGame: View {
             anchor: .leading
         )
 
-        // BEST (right side of HUD) — all-time high for the player.
-        let best = state.bestScore
+        // BEST (right side of HUD) — current mode's all-time high.
+        let best = state.bestScore(for: state.mode)
         if best > 0 {
             ctx.draw(
                 Text(String(format: "BEST %03d", best))
@@ -108,7 +347,22 @@ public struct SnakeGame: View {
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: 156 * scale.width, y: 12 * scale.height),
+                at: CGPoint(x: 134 * scale.width, y: 12 * scale.height),
+                anchor: .leading
+            )
+        }
+
+        // Carry indicator in HUD — when carrying treasure in Portals
+        // mode, show the multiplier label so the player remembers the
+        // payout they're hauling around.
+        if state.mode.hasPortals && state.isCarryingTreasure {
+            ctx.draw(
+                Text("\(state.carriedTreasureKind.label)")
+                    .font(.system(size: 10 * scale.height,
+                                  weight: .black,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 210 * scale.width, y: 12 * scale.height),
                 anchor: .leading
             )
         }
@@ -118,12 +372,30 @@ public struct SnakeGame: View {
             switch state.phase {
             case .playing: return palette.lcdShade3
             case .paused:  return palette.lcdShade2
-            case .dead:    return palette.lcdShade0
+            default:       return palette.lcdShade0
             }
         }()
         for dx in [0, 4, 8] {
             ctx.fillPixel(x: 234 + dx, y: 9, width: 3, height: 3,
                           color: indicatorColor, scale: scale)
+        }
+
+        // Portals — drawn before the snake so the snake sits on top
+        // of the portal sprites.
+        if state.mode.hasPortals {
+            drawPortals(into: &ctx, scale: scale)
+        }
+
+        // Side-map obstacles + treasure (Portals + inSideMap).
+        if state.mode.hasPortals && state.inSideMap {
+            drawSideMapObstacles(into: &ctx, scale: scale)
+            drawSideMapTreasure(into: &ctx, scale: scale)
+        }
+
+        // Smashers (Crusher / Gauntlet). Hidden while the snake is
+        // in the side map — that's the "rest area" of a heist.
+        if state.mode.hasSmashers && !state.inSideMap {
+            drawSmashers(into: &ctx, scale: scale)
         }
 
         // Food (small 6×6 within an 8-cell, slightly offset)
@@ -140,17 +412,338 @@ public struct SnakeGame: View {
                           width: 6, height: 6, color: color, scale: scale)
         }
 
+        // Carry sparkle trail + head pulse (Portals + carrying).
+        if state.mode.hasPortals && state.isCarryingTreasure {
+            drawCarryIndicator(into: &ctx, scale: scale)
+        }
+
+        // Particles (cut bursts) drawn last so they sit on top.
+        drawParticles(into: &ctx, scale: scale)
+
         // Pause / death overlay
         switch state.phase {
         case .paused:
-            renderCenteredBanner(into: &ctx, scale: scale, title: "PAUSED", subtitle: "A TO RESUME")
+            renderCenteredBanner(into: &ctx, scale: scale,
+                                 title: "PAUSED",
+                                 subtitle: "A: RESUME  B: MENU")
         case .dead:
             let subtitle = state.isNewBest
                 ? "NEW BEST!  A: RETRY"
                 : "A: RETRY  START: MENU"
-            renderCenteredBanner(into: &ctx, scale: scale, title: "GAME OVER", subtitle: subtitle)
-        case .playing:
+            renderCenteredBanner(into: &ctx, scale: scale,
+                                 title: "GAME OVER",
+                                 subtitle: subtitle)
+        default:
             break
+        }
+    }
+
+    // MARK: - Portals visuals
+
+    /// Render 1-wide pair-linked teleports (only on the current map's
+    /// side) and the active 2-wide gateway. Each 1-wide portal has a
+    /// subtle swirling animation; the gateway is drawn as a wider
+    /// doorway with corner brackets.
+    private func drawPortals(into ctx: inout GraphicsContext, scale: CGSize) {
+        // 1-wide pairs only appear on the main map for v1.
+        if !state.inSideMap {
+            for (a, b) in state.portalPairs {
+                drawWarpCell(into: &ctx, scale: scale, cell: a.cells[0], variant: 0)
+                drawWarpCell(into: &ctx, scale: scale, cell: b.cells[0], variant: 1)
+            }
+        }
+        // 2-wide gateway — main on the main map, side on the side map.
+        let gw = state.inSideMap ? state.sideGateway : state.mainGateway
+        if let g = gw {
+            drawGateway(into: &ctx, scale: scale, portal: g)
+        }
+    }
+
+    private func drawWarpCell(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        cell: SnakeState.GridPoint, variant: Int
+    ) {
+        let x = cell.x * 8, y = cell.y * 8
+        // Border ring
+        ctx.fillPixel(x: x, y: y, width: 8, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y + 7, width: 8, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + 7, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        // Inner pulse — alternates between shade2 and shade1 every
+        // few frames, offset by variant so paired endpoints pulse
+        // out of phase (visually telegraphing the pairing).
+        let frame = (state.animationTick / 10 + variant) % 2
+        let fill = (frame == 0) ? palette.lcdShade2 : palette.lcdShade1
+        ctx.fillPixel(x: x + 2, y: y + 2, width: 4, height: 4,
+                      color: fill, scale: scale)
+        ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 2,
+                      color: palette.lcdShade3, scale: scale)
+    }
+
+    private func drawGateway(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        portal: SnakeState.Portal
+    ) {
+        let x = portal.x * 8, y = portal.y * 8
+        let w = portal.width * 8
+        // Doorway outline with corner brackets
+        ctx.fillPixel(x: x, y: y, width: w, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y + 7, width: w, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + w - 1, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        // Inner swirl — 2-cell wide so it reads as a "wider portal".
+        let frame = (state.animationTick / 8) % 3
+        let innerColor: Color
+        switch frame {
+        case 0:  innerColor = palette.lcdShade2
+        case 1:  innerColor = palette.lcdShade1
+        default: innerColor = palette.lcdShade2
+        }
+        ctx.fillPixel(x: x + 2, y: y + 2, width: w - 4, height: 4,
+                      color: innerColor, scale: scale)
+        // Bracket accents at the corners (top-inner pair)
+        ctx.fillPixel(x: x + 1, y: y + 1, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + w - 2, y: y + 1, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + 1, y: y + 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + w - 2, y: y + 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+    }
+
+    private func drawSideMapObstacles(into ctx: inout GraphicsContext, scale: CGSize) {
+        for o in state.sideMapObstacles {
+            let x = o.x * 8, y = o.y * 8
+            ctx.fillPixel(x: x + 1, y: y + 1, width: 6, height: 6,
+                          color: palette.lcdShade3, scale: scale)
+            // Rivet pixels for "industrial" read
+            ctx.fillPixel(x: x + 2, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+        }
+    }
+
+    /// Treasure sprite + multiplier label. Sprite shape varies by
+    /// tier: small pellet for x2 → animated chest for x50.
+    private func drawSideMapTreasure(into ctx: inout GraphicsContext, scale: CGSize) {
+        guard let t = state.sideMapTreasure else { return }
+        let x = t.x * 8, y = t.y * 8
+        let kind = state.sideMapTreasureKind
+        let twinkle = (state.animationTick / 6) % 3
+
+        switch kind {
+        case .x2:
+            ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+        case .x5:
+            ctx.fillPixel(x: x + 2, y: y + 3, width: 4, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+            if twinkle != 2 {
+                ctx.fillPixel(x: x + 1, y: y + 2, width: 1, height: 1,
+                              color: palette.lcdShade2, scale: scale)
+            }
+        case .x10:
+            // Star: + shape
+            ctx.fillPixel(x: x + 3, y: y + 1, width: 2, height: 6,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 3, width: 6, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 2,
+                          color: palette.lcdShade1, scale: scale)
+        case .x20:
+            // Diamond
+            ctx.fillPixel(x: x + 3, y: y,     width: 2, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 1, width: 4, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 2, width: 6, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x,     y: y + 3, width: 8, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 4, width: 6, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 4, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 3, y: y + 6, width: 2, height: 1, color: palette.lcdShade3, scale: scale)
+            // Inner sparkle
+            if twinkle == 0 {
+                ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 1, color: palette.lcdShade1, scale: scale)
+            }
+        case .x50:
+            // Crown — bigger sprite with animated sparkle dots
+            ctx.fillPixel(x: x,     y: y + 5, width: 8, height: 2, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x,     y: y + 2, width: 1, height: 3, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 3, y: y + 1, width: 2, height: 4, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 7, y: y + 2, width: 1, height: 3, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 4, height: 1, color: palette.lcdShade1, scale: scale)
+            // Sparkle dots around the crown
+            if twinkle != 1 {
+                ctx.fillPixel(x: x - 2, y: y, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: x + 9, y: y + 1, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            }
+            if twinkle == 2 {
+                ctx.fillPixel(x: x + 4, y: y - 2, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            }
+        }
+
+        // Multiplier label, drawn just to the right of the sprite.
+        // Anchored leading so it can extend off the cell boundary
+        // without clipping the sprite itself.
+        let labelX = (t.x + 1) * 8 + 1
+        let labelY = t.y * 8 + 4
+        ctx.draw(
+            Text(kind.label)
+                .font(.system(size: 8 * scale.height,
+                              weight: .black,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: CGFloat(labelX) * scale.width,
+                        y: CGFloat(labelY) * scale.height),
+            anchor: .leading
+        )
+    }
+
+    // MARK: - Crusher visuals
+
+    /// Render every smasher in its current phase. Two industrial
+    /// blocks slide together at the anchor cell; the `closed` phase
+    /// is the danger frame where the snake gets cut/killed.
+    private func drawSmashers(into ctx: inout GraphicsContext, scale: CGSize) {
+        for s in state.smashers {
+            drawSmasher(into: &ctx, scale: scale, smasher: s)
+        }
+    }
+
+    private func drawSmasher(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        smasher s: SnakeState.Smasher
+    ) {
+        // Compute closing-progress in [0, 1]. 0 = fully open, 1 = closed.
+        let t: Double
+        switch s.phase {
+        case .open:
+            t = 0
+        case .closing:
+            let n = Double(SnakeState.Smasher.closedStart - SnakeState.Smasher.closingStart)
+            t = Double(s.phaseTick - SnakeState.Smasher.closingStart) / n
+        case .closed:
+            t = 1
+        case .opening:
+            let n = Double(SnakeState.Smasher.cycleLen - SnakeState.Smasher.openingStart)
+            t = 1 - Double(s.phaseTick - SnakeState.Smasher.openingStart) / n
+        }
+
+        let anchorPx = s.x * 8
+        let anchorPy = s.y * 8
+
+        switch s.orientation {
+        case .vertical:
+            // Top block slides DOWN as t→1; bottom block slides UP.
+            // Open: top at y-1, bottom at y+1 (8px above/below anchor).
+            // Closed: both meet at anchor.
+            let slide = Int((Double(8) * t).rounded())
+            let topY    = anchorPy - 8 + slide
+            let bottomY = anchorPy + 8 - slide
+            drawSmasherBlock(into: &ctx, scale: scale, x: anchorPx, y: topY,    orientation: .vertical, side: .top)
+            drawSmasherBlock(into: &ctx, scale: scale, x: anchorPx, y: bottomY, orientation: .vertical, side: .bottom)
+        case .horizontal:
+            // Left block slides RIGHT; right block slides LEFT.
+            let slide = Int((Double(8) * t).rounded())
+            let leftX  = anchorPx - 8 + slide
+            let rightX = anchorPx + 8 - slide
+            drawSmasherBlock(into: &ctx, scale: scale, x: leftX,  y: anchorPy, orientation: .horizontal, side: .top)
+            drawSmasherBlock(into: &ctx, scale: scale, x: rightX, y: anchorPy, orientation: .horizontal, side: .bottom)
+        }
+
+        // Closed-frame flash: paint a single full-cell danger square
+        // at the anchor so the closure reads as IMPACT, not just two
+        // blocks meeting up.
+        if s.phase == .closed {
+            ctx.fillPixel(x: anchorPx, y: anchorPy, width: 8, height: 8,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: anchorPx + 2, y: anchorPy + 2, width: 4, height: 4,
+                          color: palette.lcdShade1, scale: scale)
+        }
+    }
+
+    private enum SmasherSide { case top, bottom }
+
+    private func drawSmasherBlock(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        x: Int, y: Int,
+        orientation: SnakeState.Smasher.Orientation,
+        side: SmasherSide
+    ) {
+        // Body — slightly inset so adjacent cells don't merge visually.
+        ctx.fillPixel(x: x, y: y, width: 8, height: 8,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + 1, y: y + 1, width: 6, height: 6,
+                      color: palette.lcdShade2, scale: scale)
+        // "Stamping face" — the side that points toward the anchor.
+        switch (orientation, side) {
+        case (.vertical, .top):
+            ctx.fillPixel(x: x, y: y + 7, width: 8, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+            // Bolt accents
+            ctx.fillPixel(x: x + 2, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        case (.vertical, .bottom):
+            ctx.fillPixel(x: x, y: y, width: 8, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        case (.horizontal, .top):
+            ctx.fillPixel(x: x + 7, y: y, width: 1, height: 8,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        case (.horizontal, .bottom):
+            ctx.fillPixel(x: x, y: y, width: 1, height: 8,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        }
+    }
+
+    /// Pixel-particle render with alpha fade based on remaining life.
+    private func drawParticles(into ctx: inout GraphicsContext, scale: CGSize) {
+        for p in state.particles.particles {
+            let alpha = min(1.0, Double(p.life) / 8.0)
+            let color = palette.lcdShade3.opacity(alpha)
+            let px = Int(p.x.rounded())
+            let py = Int(p.y.rounded())
+            let size = p.life > p.initialLife / 2 ? 2 : 1
+            ctx.fillPixel(x: px, y: py, width: size, height: size,
+                          color: color, scale: scale)
+        }
+    }
+
+    /// Pulsing pixel on top of the snake's head + subtle sparkles
+    /// trailing behind, so the player can see they're carrying.
+    private func drawCarryIndicator(into ctx: inout GraphicsContext, scale: CGSize) {
+        guard let head = state.snake.first else { return }
+        let hx = head.x * 8, hy = head.y * 8
+        // Pulsing pixel — 2x2 when "lit", 1x1 when dim, on a 4-frame cycle
+        let pulse = (state.animationTick / 8) % 2
+        if pulse == 0 {
+            ctx.fillPixel(x: hx + 2, y: hy - 1, width: 4, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: hx + 3, y: hy - 2, width: 2, height: 1,
+                          color: palette.lcdShade2, scale: scale)
+        } else {
+            ctx.fillPixel(x: hx + 3, y: hy - 1, width: 2, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+        }
+        // Subtle sparkles on a couple of body segments behind the head
+        let sparkleFrames = (state.animationTick / 5) % 4
+        for (i, seg) in state.snake.enumerated() where i > 0 && i % 3 == sparkleFrames {
+            let sx = seg.x * 8 + 3, sy = seg.y * 8 + 3
+            ctx.fillPixel(x: sx, y: sy, width: 1, height: 1,
+                          color: palette.lcdShade3, scale: scale)
         }
     }
 
@@ -196,7 +789,9 @@ public struct SnakeGame: View {
 // MARK: - Built-in cartridge factory
 
 public extension GameBoyCartridge {
-    /// Built-in classic Snake.
+    /// Built-in Snake. Hosts a mode-select grid with Classic in v1;
+    /// additional modes (Portals, Crusher, Gauntlet) plug in as new
+    /// cases in `SnakeState.Mode`.
     static let snake = GameBoyCartridge(
         id: "snake",
         title: "SNAKE",
