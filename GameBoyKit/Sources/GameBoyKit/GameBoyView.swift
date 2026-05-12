@@ -135,12 +135,13 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
 
     private func content(palette: GameBoyPalette) -> some View {
         VStack(spacing: 0) {
-            // Top row: DMG-style power slider on the left, MENU button
-            // mod on the right. Sits at the top of the face.
+            // Top row: DMG-style power slider on the left. MENU
+            // button used to live in this row's right slot but moved
+            // to the bottom-left (stacked above the brand mark) for
+            // thumb-reach — see the bottom row below.
             HStack(alignment: .center) {
                 PowerSwitch(isOn: $powerOn, palette: palette)
                 Spacer(minLength: 0)
-                MenuButton(input: input, palette: palette, label: menuLabel)
             }
             .padding(.bottom, 12)
 
@@ -195,14 +196,19 @@ public struct GameBoyView<Screen: View, Headline: View, Subtitle: View, Brand: V
             // Flex gap — pushes the brand strip to the bottom edge of the face.
             Spacer(minLength: 20)
 
-            // Bottom row: brand on the left, speaker grille on the right.
-            // Kept as a corner accent — the grille reads as "Game Boy"
-            // without needing a physical chassis curve to host it.
-            HStack(alignment: .center) {
-                brandBuilder()
-                    .font(GameBoyTypography.brandFont)
-                    .foregroundStyle(palette.brandColor)
-                    .tracking(0.8)
+            // Bottom row: MENU pill stacked above the brand on the
+            // left, speaker grille on the right. Grille bottom aligns
+            // with brand bottom (chassis bottom edge); MENU rides
+            // higher in the band so it's within natural thumb reach
+            // when the left hand sits on the D-pad above it.
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 6) {
+                    MenuButton(input: input, palette: palette, label: menuLabel)
+                    brandBuilder()
+                        .font(GameBoyTypography.brandFont)
+                        .foregroundStyle(palette.brandColor)
+                        .tracking(0.8)
+                }
                 Spacer()
                 SpeakerGrille(palette: palette)
                     .frame(width: 90, height: 60)
