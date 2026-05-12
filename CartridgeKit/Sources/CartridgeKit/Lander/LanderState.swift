@@ -328,13 +328,29 @@ public final class LanderState {
     /// rhythm rather than just "narrow → wider". Two independent sine
     /// stacks drive the left and right walls separately, giving each
     /// side its own organic undulation (the cave doesn't look like a
-    /// symmetric tube). Deterministic for now; a seed can be folded
-    /// in later for per-run variety.
+    /// symmetric tube).
+    ///
+    /// Per-run randomness comes from four independent phase offsets
+    /// (uniform in [0, 2π)) applied to the centerline and per-side
+    /// wobble sines. Amplitudes + frequencies stay fixed so the wall-
+    /// bounds + minimum-passage-width guarantees are preserved — only
+    /// the wave starting points change run-to-run.
     private func generateCave() {
         let depth = Self.caveDepth
         let centerBase = Double(Self.lcdWidth) / 2
         var left  = [Int](); left.reserveCapacity(depth)
         var right = [Int](); right.reserveCapacity(depth)
+
+        // Per-run sine phase offsets. Each run gets a fresh seed, so
+        // the cave's curve pattern differs while the gameplay-tuned
+        // width profile + amplitudes are preserved.
+        let twoPi = Double.pi * 2
+        let phaseCenterA = Double.random(in: 0..<twoPi)
+        let phaseCenterB = Double.random(in: 0..<twoPi)
+        let phaseLeftA   = Double.random(in: 0..<twoPi)
+        let phaseLeftB   = Double.random(in: 0..<twoPi)
+        let phaseRightA  = Double.random(in: 0..<twoPi)
+        let phaseRightB  = Double.random(in: 0..<twoPi)
 
         for y in 0..<depth {
             // Piecewise width — seven segments tuned for pacing:
@@ -364,18 +380,20 @@ public final class LanderState {
             // Independent left/right wall undulation — both walls share
             // a slow drifting centerline, but each side also has its
             // own faster wobble so the cave breathes asymmetrically.
+            // Random per-run phase offsets vary the curves between
+            // runs without changing the amplitude budget.
             let yd = Double(y)
-            let centerDrift = sin(yd * 0.020) * 14
-                            + sin(yd * 0.041 + 1.3) * 6
+            let centerDrift = sin(yd * 0.020 + phaseCenterA) * 14
+                            + sin(yd * 0.041 + phaseCenterB) * 6
             let center = centerBase + centerDrift
 
             // Per-side wobble adds bulges and constrictions independent
             // of the centerline drift — gives knots and bumps in the
             // walls without crossing the half-width budget.
-            let leftWobble  = sin(yd * 0.063 + 0.4) * 5
-                            + sin(yd * 0.110 + 2.1) * 3
-            let rightWobble = sin(yd * 0.058 + 2.7) * 5
-                            + sin(yd * 0.135 + 0.9) * 3
+            let leftWobble  = sin(yd * 0.063 + phaseLeftA) * 5
+                            + sin(yd * 0.110 + phaseLeftB) * 3
+            let rightWobble = sin(yd * 0.058 + phaseRightA) * 5
+                            + sin(yd * 0.135 + phaseRightB) * 3
 
             left.append(  Int((center - halfWidth + leftWobble).rounded()) )
             right.append( Int((center + halfWidth + rightWobble).rounded()) )
