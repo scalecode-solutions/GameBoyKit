@@ -45,21 +45,23 @@ public final class HopperState {
 
     // MARK: - Types
 
-    /// Which mode the player is currently inside. v1 ships only
-    /// `.classic`; add cases here as new modes land.
+    /// Which mode the player is currently inside.
     public enum Mode: String, CaseIterable, Sendable, Codable {
         case classic
-        // case endless, nightShift, heist — coming in later iterations.
+        case endless
+        // case nightShift, heist — coming in later iterations.
 
         public var displayName: String {
             switch self {
             case .classic: return "CLASSIC"
+            case .endless: return "ENDLESS"
             }
         }
 
         public var briefing: String {
             switch self {
             case .classic: return "ROAD. RIVER. REACH THE TOP."
+            case .endless: return "CLIMB FOREVER. DON'T FALL BEHIND."
             }
         }
     }
@@ -82,6 +84,7 @@ public final class HopperState {
     public enum LaneKind: Sendable, Equatable {
         case road    // touching an entity = die
         case river   // entity = log (ride it); empty water = drown
+        case safe    // no entities; safe grass strip (used in Endless)
     }
 
     public enum LaneDirection: Sendable { case left, right }
@@ -109,7 +112,8 @@ public final class HopperState {
         case crushed       // hit by a car
         case drowned       // in river, not on a log
         case carriedOff    // log rode the frog off the screen
-        case timeUp
+        case timeUp        // Classic crossing clock hit zero
+        case fellBehind    // Endless: scrolled off the screen's bottom
     }
 
     // MARK: - State
@@ -145,12 +149,44 @@ public final class HopperState {
     public private(set) var lastDeath: DeathCause? = nil
 
     /// Highest row reached (lowest Y value) during the current life —
-    /// used by future endless mode scoring; harmless in Classic.
+    /// used by Endless mode scoring; harmless in Classic.
     public private(set) var bestRow: Int = 0
+
+    // Endless-mode state.
+
+    /// World-row of the screen's top edge. Decreases as the camera
+    /// scrolls upward to reveal higher world rows. Zero in Classic
+    /// (the camera doesn't move). Stored as Double so the camera can
+    /// scroll smoothly at fractional cell speeds.
+    public private(set) var cameraRow: Double = 0
+
+    /// How many cells per tick the camera moves upward in Endless.
+    /// Stored on the model so future polish can ramp this with score.
+    public private(set) var endlessScrollRate: Double = 0.012
+
+    /// In Endless mode, the most-negative (highest) world row we've
+    /// already generated terrain for. Procgen extends this upward as
+    /// the camera approaches it.
+    public private(set) var endlessTopRow: Int = 0
+
+    /// Seeded RNG for Endless procgen so tests can pin a deterministic
+    /// world. nil in Classic.
+    @ObservationIgnored
+    private var endlessRng: (any RandomNumberGenerator)? = nil
+
+    @ObservationIgnored
+    private var endlessRecentKinds: [LaneKind] = []   // last few generated kinds, for variety bias
 
     // MARK: - Init
 
     public init() {
+        resetToTitle()
+    }
+
+    /// Test seam — lets tests inject a deterministic RNG so Endless
+    /// procgen is reproducible. Production callers use `init()`.
+    public init<R: RandomNumberGenerator>(endlessRng: R) {
+        self.endlessRng = endlessRng
         resetToTitle()
     }
 
@@ -181,10 +217,21 @@ public final class HopperState {
 
     public func startRun(_ mode: Mode) {
         self.mode = mode
+        cameraRow = 0
+        endlessTopRow = 0
+        endlessRecentKinds = []
         setupLanes(for: mode)
-        lives = Self.classicLives
+        switch mode {
+        case .classic:
+            lives = Self.classicLives
+            timeRemainingTicks = Self.classicTimeTicks
+        case .endless:
+            // Endless is one-shot — die once, run ends. The HUD shows
+            // "ROWS X" rather than "TIME XX" while in this mode.
+            lives = 1
+            timeRemainingTicks = 0
+        }
         score = 0
-        timeRemainingTicks = Self.classicTimeTicks
         lastDeath = nil
         bestRow = Self.startRow
         respawnFrog()
@@ -225,6 +272,9 @@ public final class HopperState {
         timeRemainingTicks = 0
         lastDeath = nil
         bestRow = 0
+        cameraRow = 0
+        endlessTopRow = 0
+        endlessRecentKinds = []
     }
 
     // MARK: - Lane setup
@@ -248,13 +298,140 @@ public final class HopperState {
                 Lane(row: 11, kind: .road, direction: .left,  speed: 0.06, entityWidth: 3, entityCount: 3, visualVariant: 2),
                 Lane(row: 12, kind: .road, direction: .right, speed: 0.09, entityWidth: 2, entityCount: 4, visualVariant: 0),
             ]
-        }
-        // Spawn entities evenly spaced along each lane.
-        entities = lanes.map { lane in
-            let spacing = Double(Self.cols) / Double(lane.entityCount)
-            return (0..<lane.entityCount).map { i in
-                Entity(x: Double(i) * spacing)
+            // Spawn entities evenly spaced along each lane.
+            entities = lanes.map { lane in
+                let spacing = Double(Self.cols) / Double(lane.entityCount)
+                return (0..<lane.entityCount).map { i in
+                    Entity(x: Double(i) * spacing)
+                }
             }
+        case .endless:
+            // Endless: every world row gets a Lane entry (rendered as
+            // its own terrain strip). Pre-fill the initial viewport
+            // plus a buffer above (negative rows) so the camera has
+            // procgen-ready land to scroll into.
+            //
+            // Rows around the frog's spawn position are forced to .safe
+            // so the player doesn't immediately die.
+            lanes = []
+            entities = []
+            endlessTopRow = Self.rows + 2    // start below the visible area, grow upward
+            endlessRecentKinds = []
+            // First: lay down the visible starting area (rows -8 ... rows+2).
+            // The frog spawns at startRow (=16) on guaranteed-safe ground.
+            for row in stride(from: Self.rows + 1, through: -8, by: -1) {
+                let forced: LaneKind? = {
+                    // Force the spawn row + a 1-row buffer above and
+                    // below to .safe so the player has somewhere to
+                    // stand before the world starts demanding hops.
+                    if abs(row - Self.startRow) <= 1 { return .safe }
+                    if row >= Self.rows { return .safe }    // sidewalk under spawn
+                    return nil
+                }()
+                appendEndlessLane(at: row, forced: forced)
+            }
+            endlessTopRow = -8
+        }
+    }
+
+    /// Generate (or extend) Endless lanes until at least `targetTopRow`
+    /// (most-negative row) is in the lanes array. Lanes are appended
+    /// to the end of the array regardless of their row — collision
+    /// lookups use `firstIndex(where: { $0.row == frogY })`.
+    private func ensureEndlessLanes(throughRow targetTopRow: Int) {
+        while endlessTopRow > targetTopRow {
+            endlessTopRow -= 1
+            appendEndlessLane(at: endlessTopRow, forced: nil)
+        }
+    }
+
+    private func appendEndlessLane(at row: Int, forced: LaneKind?) {
+        let kind = forced ?? pickEndlessLaneKind()
+        let lane = makeEndlessLane(row: row, kind: kind)
+        lanes.append(lane)
+        entities.append(spawnEntities(for: lane))
+        endlessRecentKinds.append(kind)
+        if endlessRecentKinds.count > 3 {
+            endlessRecentKinds.removeFirst()
+        }
+    }
+
+    /// Pick a lane kind with a small variety bias: if the last two
+    /// generated kinds were the same, force something different so we
+    /// don't get runs of 4+ identical lanes in a row.
+    private func pickEndlessLaneKind() -> LaneKind {
+        let r = rngDouble()
+        let lastTwoSame =
+            endlessRecentKinds.count >= 2 &&
+            endlessRecentKinds[endlessRecentKinds.count - 1] ==
+            endlessRecentKinds[endlessRecentKinds.count - 2]
+
+        // Base weights: ~35% road, ~35% river, ~30% safe.
+        // (Safe lanes give the player breathing room between hazards.)
+        let kind: LaneKind = {
+            if r < 0.35 { return .road }
+            if r < 0.70 { return .river }
+            return .safe
+        }()
+
+        if lastTwoSame && endlessRecentKinds.last == kind {
+            // Force a switch — pick anything but the repeated kind.
+            let alternatives: [LaneKind] = [.road, .river, .safe].filter { $0 != kind }
+            return alternatives[Int(rngDouble() * Double(alternatives.count))]
+        }
+        return kind
+    }
+
+    private func makeEndlessLane(row: Int, kind: LaneKind) -> Lane {
+        switch kind {
+        case .safe:
+            return Lane(row: row, kind: .safe,
+                        direction: .left, speed: 0,
+                        entityWidth: 0, entityCount: 0,
+                        visualVariant: 0)
+        case .road:
+            let dir: LaneDirection = rngDouble() < 0.5 ? .left : .right
+            // Speed range: 0.05 (slow) to 0.13 (fast)
+            let speed = 0.05 + rngDouble() * 0.08
+            let variant = Int(rngDouble() * 3)
+            let width = (variant == 2) ? 3 : 2      // variant 2 = trucks
+            let count = Int(2 + rngDouble() * 3)    // 2-4 cars
+            return Lane(row: row, kind: .road,
+                        direction: dir, speed: speed,
+                        entityWidth: width, entityCount: count,
+                        visualVariant: variant)
+        case .river:
+            let dir: LaneDirection = rngDouble() < 0.5 ? .left : .right
+            let speed = 0.03 + rngDouble() * 0.05   // 0.03 to 0.08
+            let variant = Int(rngDouble() * 2)
+            let width = Int(3 + rngDouble() * 4)    // 3-6 wide logs
+            let count = Int(2 + rngDouble() * 2)    // 2-3 logs
+            return Lane(row: row, kind: .river,
+                        direction: dir, speed: speed,
+                        entityWidth: width, entityCount: count,
+                        visualVariant: variant)
+        }
+    }
+
+    private func spawnEntities(for lane: Lane) -> [Entity] {
+        guard lane.entityCount > 0 else { return [] }
+        let spacing = Double(Self.cols) / Double(lane.entityCount)
+        // Slight random phase per lane so adjacent lanes don't all
+        // line up at x=0 on spawn.
+        let phase = rngDouble() * spacing
+        return (0..<lane.entityCount).map { i in
+            Entity(x: Double(i) * spacing + phase)
+        }
+    }
+
+    /// Return a uniform random Double in [0, 1). Uses the seeded RNG
+    /// when one was injected (tests), otherwise falls back to the
+    /// system RNG so each run is fresh.
+    private func rngDouble() -> Double {
+        if endlessRng != nil {
+            return Double.random(in: 0..<1, using: &endlessRng!)
+        } else {
+            return Double.random(in: 0..<1)
         }
     }
 
@@ -282,9 +459,24 @@ public final class HopperState {
         case .right: dx =  1; dy =  0
         }
         let newX = max(0, min(Self.cols - 1, frogX + dx))
-        // Clamp at goalRow on top so the frog can step ONTO the bank
-        // (which immediately wins) but never above it.
-        let newY = max(Self.goalRow, min(Self.rows - 1, frogY + dy))
+        // Top clamp depends on mode:
+        // - Classic: clamp at goalRow so the frog can step ONTO the
+        //   bank (which immediately wins) but never above it.
+        // - Endless: no upward clamp — keep climbing into procgen.
+        let newY: Int = {
+            switch mode {
+            case .classic:
+                return max(Self.goalRow, min(Self.rows - 1, frogY + dy))
+            case .endless:
+                // Always extend procgen ahead before we let the frog
+                // leap into it, so the new row already has terrain.
+                let candidate = min(Self.rows - 1, frogY + dy)
+                if candidate < endlessTopRow {
+                    ensureEndlessLanes(throughRow: candidate - 4)
+                }
+                return candidate
+            }
+        }()
         guard newX != frogX || newY != frogY else { return }
 
         if dy < 0 && newY < bestRow {
@@ -297,8 +489,9 @@ public final class HopperState {
         ridingLane = nil
         ridingEntity = nil
 
-        // Resolve win immediately if we just hopped onto the goal row.
-        if frogY <= Self.goalRow {
+        // Classic-only: reaching the goal row immediately wins. Endless
+        // has no win condition — keep climbing.
+        if mode == .classic && frogY <= Self.goalRow {
             win()
             return
         }
@@ -310,7 +503,15 @@ public final class HopperState {
 
     public func tick() {
         guard phase == .playing else { return }
+        switch mode {
+        case .classic: classicTick()
+        case .endless: endlessTick()
+        }
+    }
 
+    // MARK: - Classic mode tick
+
+    private func classicTick() {
         // Tick the per-crossing clock first.
         if timeRemainingTicks > 0 {
             timeRemainingTicks -= 1
@@ -324,8 +525,6 @@ public final class HopperState {
         advanceEntities()
 
         // If the frog is riding a log, drift it along with the log.
-        // We update `frogPixelX` and re-derive the cell-level `frogX`
-        // each frame; if the frog rides off-screen, it's lost.
         if let li = ridingLane, let ei = ridingEntity,
            lanes.indices.contains(li), entities[li].indices.contains(ei) {
             let lane = lanes[li]
@@ -338,7 +537,46 @@ public final class HopperState {
             }
         }
 
-        // Re-resolve collisions for the frog's current cell.
+        resolveFrogVsLanes(isHopping: false)
+    }
+
+    // MARK: - Endless mode tick
+
+    /// Crossy-Road-style endless ascent. Camera scrolls upward at a
+    /// constant rate; new procedurally-generated lanes appear above
+    /// the camera as needed. The frog must keep climbing or it'll
+    /// scroll off the bottom of the screen.
+    private func endlessTick() {
+        // Scroll camera up by scrollRate (cameraRow becomes more negative).
+        cameraRow -= endlessScrollRate
+
+        // Procgen: ensure we have lanes far enough above the camera
+        // for the upper screen + some buffer.
+        ensureEndlessLanes(throughRow: Int(cameraRow.rounded()) - 4)
+
+        advanceEntities()
+
+        // Log-ride drift.
+        if let li = ridingLane, let ei = ridingEntity,
+           lanes.indices.contains(li), entities[li].indices.contains(ei) {
+            let lane = lanes[li]
+            let delta = (lane.direction == .right) ? lane.speed : -lane.speed
+            frogPixelX += delta
+            frogX = Int(frogPixelX.rounded())
+            if frogPixelX < -0.5 || frogPixelX > Double(Self.cols) - 0.5 {
+                die(.carriedOff)
+                return
+            }
+        }
+
+        // Fall-behind check: if the frog's screen-row exceeds the
+        // viewport's bottom, it's been left behind.
+        let screenRow = Double(frogY) - cameraRow
+        if screenRow > Double(Self.rows - 1) + 0.5 {
+            die(.fellBehind)
+            return
+        }
+
         resolveFrogVsLanes(isHopping: false)
     }
 
@@ -404,6 +642,12 @@ public final class HopperState {
             }
             ridingLane = li
             ridingEntity = idx
+        case .safe:
+            // No hazards on a safe lane; just snap pixel-X back to the
+            // cell grid so we don't carry over log-ride drift.
+            ridingLane = nil
+            ridingEntity = nil
+            frogPixelX = Double(frogX)
         }
     }
 
