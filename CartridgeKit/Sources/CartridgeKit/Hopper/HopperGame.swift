@@ -281,6 +281,19 @@ public struct HopperGame: View {
             drawEndlessBackground(into: &ctx, scale: scale, camY: camY)
             drawLanes(into: &ctx, scale: scale, camY: camY)
             drawFrog(into: &ctx, scale: scale, camY: camY)
+        case .nightShift:
+            // Night Shift uses Classic's layout. Paint the scene
+            // normally first, then layer a darkness mask + headlight
+            // beams scaled by `nightProgress` so the transition between
+            // day and night reads as a smooth dusk/dawn (~0.5s fade).
+            drawBackground(into: &ctx, scale: scale)
+            drawLanes(into: &ctx, scale: scale, camY: 0)
+            drawFrog(into: &ctx, scale: scale, camY: 0)
+            let np = state.nightProgress
+            if np > 0 {
+                drawNightOverlay(into: &ctx, scale: scale, intensity: np)
+                drawHeadlights(into: &ctx, scale: scale, intensity: np)
+            }
         }
         drawHUD(into: &ctx, scale: scale)
     }
@@ -362,6 +375,85 @@ public struct HopperGame: View {
                 ctx.fillPixel(x: col * cs + 3, y: row * cs + 3,
                               width: 2, height: 2,
                               color: palette.lcdShade1, scale: scale)
+            }
+        }
+    }
+
+    /// Night-phase darkness overlay. Paints four shade3 rectangles
+    /// covering everything outside a 7×5 cell lantern zone centered
+    /// on the frog. `intensity` scales the overlay opacity so dusk
+    /// and dawn fade smoothly rather than hard-switching.
+    private func drawNightOverlay(
+        into ctx: inout GraphicsContext, scale: CGSize, intensity: Double
+    ) {
+        let cs = HopperState.cellSize
+        let totalW = HopperState.cols * cs
+        let totalH = HopperState.rows * cs
+        let hudH = HopperState.hudRows * cs
+
+        // Lantern bounds in cells, clamped to the play area.
+        let lanternHalfW = 3, lanternHalfH = 2
+        let lFrogX = state.frogX
+        let lFrogY = state.frogY
+        let lanternLeft  = max(0, lFrogX - lanternHalfW) * cs
+        let lanternRight = min(HopperState.cols, lFrogX + lanternHalfW + 1) * cs
+        let lanternTop    = max(HopperState.hudRows, lFrogY - lanternHalfH) * cs
+        let lanternBottom = min(HopperState.rows,    lFrogY + lanternHalfH + 1) * cs
+
+        let darkColor = palette.lcdShade3.opacity(0.88 * intensity)
+
+        // Top strip
+        if lanternTop > hudH {
+            ctx.fillPixel(x: 0, y: hudH,
+                          width: totalW, height: lanternTop - hudH,
+                          color: darkColor, scale: scale)
+        }
+        // Bottom strip
+        if lanternBottom < totalH {
+            ctx.fillPixel(x: 0, y: lanternBottom,
+                          width: totalW, height: totalH - lanternBottom,
+                          color: darkColor, scale: scale)
+        }
+        // Left strip
+        if lanternLeft > 0 {
+            ctx.fillPixel(x: 0, y: lanternTop,
+                          width: lanternLeft, height: lanternBottom - lanternTop,
+                          color: darkColor, scale: scale)
+        }
+        // Right strip
+        if lanternRight < totalW {
+            ctx.fillPixel(x: lanternRight, y: lanternTop,
+                          width: totalW - lanternRight,
+                          height: lanternBottom - lanternTop,
+                          color: darkColor, scale: scale)
+        }
+    }
+
+    /// Draw a short headlight beam projecting from each road entity in
+    /// its direction of motion. Fades in/out with the day/night cycle
+    /// via `intensity` so they don't pop against daylight.
+    private func drawHeadlights(
+        into ctx: inout GraphicsContext, scale: CGSize, intensity: Double
+    ) {
+        let cs = HopperState.cellSize
+        let outer = palette.lcdShade0.opacity(intensity)
+        let inner = palette.lcdShade1.opacity(intensity)
+        for (li, lane) in state.lanes.enumerated() {
+            guard lane.kind == .road else { continue }
+            let y = lane.row * cs
+            for entity in state.entities[li] {
+                let px = Int((entity.x * Double(cs)).rounded())
+                let pw = lane.entityWidth * cs
+                let beamLen = 12     // pixels of headlight reach
+                let beamH = 3
+                let beamY = y + 2    // sits in the car's grille area
+                let beamX = (lane.direction == .right) ? px + pw : px - beamLen
+                ctx.fillPixel(x: beamX, y: beamY,
+                              width: beamLen, height: beamH,
+                              color: outer, scale: scale)
+                ctx.fillPixel(x: beamX, y: beamY + 1,
+                              width: beamLen, height: 1,
+                              color: inner, scale: scale)
             }
         }
     }
@@ -567,9 +659,9 @@ public struct HopperGame: View {
             anchor: .center
         )
 
-        // Right-side readout — Classic shows TIME, Endless shows ROWS climbed.
+        // Right-side readout: Classic & Night Shift show TIME, Endless shows ROWS.
         switch state.mode {
-        case .classic:
+        case .classic, .nightShift:
             let seconds = max(0, state.timeRemainingTicks / 60)
             let lowTime = seconds <= 5
             let color: Color = {
@@ -595,6 +687,23 @@ public struct HopperGame: View {
                     .foregroundColor(palette.lcdShade3),
                 at: CGPoint(x: CGFloat(w - 4) * scale.width, y: 8 * scale.height),
                 anchor: .trailing
+            )
+        }
+
+        // Night Shift: DAY / NIGHT phase badge tucked between lives
+        // and the centered score so the player always knows which
+        // half of the cycle they're in.
+        if state.mode == .nightShift {
+            let badgeText = state.isNightPhase ? "NIGHT" : "DAY"
+            ctx.draw(
+                Text(badgeText)
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(state.isNightPhase ? palette.lcdShade1
+                                                        : palette.lcdShade3),
+                at: CGPoint(x: 64 * scale.width, y: 8 * scale.height),
+                anchor: .leading
             )
         }
     }

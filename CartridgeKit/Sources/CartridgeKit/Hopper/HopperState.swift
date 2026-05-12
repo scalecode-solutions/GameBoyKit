@@ -49,19 +49,22 @@ public final class HopperState {
     public enum Mode: String, CaseIterable, Sendable, Codable {
         case classic
         case endless
-        // case nightShift, heist — coming in later iterations.
+        case nightShift
+        // case heist — coming in later iterations.
 
         public var displayName: String {
             switch self {
-            case .classic: return "CLASSIC"
-            case .endless: return "ENDLESS"
+            case .classic:    return "CLASSIC"
+            case .endless:    return "ENDLESS"
+            case .nightShift: return "NIGHT SHIFT"
             }
         }
 
         public var briefing: String {
             switch self {
-            case .classic: return "ROAD. RIVER. REACH THE TOP."
-            case .endless: return "CLIMB FOREVER. DON'T FALL BEHIND."
+            case .classic:    return "ROAD. RIVER. REACH THE TOP."
+            case .endless:    return "CLIMB FOREVER. DON'T FALL BEHIND."
+            case .nightShift: return "DAY THEN DARK. WATCH THE HEADLIGHTS."
             }
         }
     }
@@ -177,6 +180,45 @@ public final class HopperState {
     @ObservationIgnored
     private var endlessRecentKinds: [LaneKind] = []   // last few generated kinds, for variety bias
 
+    // Night Shift state.
+
+    /// Ticks 0..<nightShiftCycleLen. Day phase is the first half,
+    /// night is the second. `isNightPhase` is the computed flag.
+    public private(set) var nightShiftCycleTick: Int = 0
+
+    /// Length of one full day+night cycle (ticks). Half is day, half
+    /// is night. At 60Hz, 600 ticks = 10s cycle = 5s day / 5s night.
+    public static let nightShiftCycleLen: Int = 600
+
+    /// Ticks each phase boundary spends ramping `nightProgress` between
+    /// 0 and 1. At 60Hz, 30 ticks = 0.5s fade in / out.
+    public static let nightFadeTicks: Int = 30
+
+    /// Speed multiplier applied to lane traffic at full night. Speed
+    /// linearly interpolates from 1.0 (day) toward this value as
+    /// `nightProgress` rises 0→1, so the transition is smooth.
+    public static let nightSpeedMultiplier: Double = 0.65
+
+    /// 0 = full day, 1 = full night. Ramps smoothly across each phase
+    /// boundary over `nightFadeTicks`. Drives overlay opacity, traffic
+    /// speed, and headlight visibility so the transition feels like a
+    /// short dusk/dawn rather than a hard switch.
+    public var nightProgress: Double {
+        guard mode == .nightShift else { return 0 }
+        let len  = Self.nightShiftCycleLen
+        let half = len / 2
+        let fade = Self.nightFadeTicks
+        let t    = nightShiftCycleTick
+        if t < half - fade        { return 0 }
+        if t < half               { return Double(t - (half - fade)) / Double(fade) }
+        if t < len - fade         { return 1 }
+        return 1 - Double(t - (len - fade)) / Double(fade)
+    }
+
+    public var isNightPhase: Bool {
+        nightProgress >= 0.5
+    }
+
     // MARK: - Init
 
     public init() {
@@ -220,9 +262,13 @@ public final class HopperState {
         cameraRow = 0
         endlessTopRow = 0
         endlessRecentKinds = []
+        nightShiftCycleTick = 0
         setupLanes(for: mode)
         switch mode {
-        case .classic:
+        case .classic, .nightShift:
+            // Night Shift uses the same Classic layout, lives, and timer
+            // — the day/night cycle drives the visibility + traffic-
+            // speed differences, not the lane configuration.
             lives = Self.classicLives
             timeRemainingTicks = Self.classicTimeTicks
         case .endless:
@@ -275,18 +321,18 @@ public final class HopperState {
         cameraRow = 0
         endlessTopRow = 0
         endlessRecentKinds = []
+        nightShiftCycleTick = 0
     }
 
     // MARK: - Lane setup
 
     private func setupLanes(for mode: Mode) {
         switch mode {
-        case .classic:
-            // Five river lanes (rows 3-7, filling all visible water),
-            // median row 8, four road lanes. The topmost river lane
-            // sits directly under the goal row so the frog hops from
-            // a log onto a lily pad — classic Frogger layout. Speeds
-            // and directions alternate so crossing isn't memorized.
+        case .classic, .nightShift:
+            // Night Shift uses the same Classic five-river + median +
+            // four-road layout. The night phase's reduced visibility
+            // and slower traffic provide the twist, not a different
+            // lane configuration.
             lanes = [
                 Lane(row: 3, kind: .river, direction: .left,  speed: 0.05, entityWidth: 4, entityCount: 3, visualVariant: 0),
                 Lane(row: 4, kind: .river, direction: .right, speed: 0.04, entityWidth: 5, entityCount: 3, visualVariant: 1),
@@ -465,7 +511,7 @@ public final class HopperState {
         // - Endless: no upward clamp — keep climbing into procgen.
         let newY: Int = {
             switch mode {
-            case .classic:
+            case .classic, .nightShift:
                 return max(Self.goalRow, min(Self.rows - 1, frogY + dy))
             case .endless:
                 // Always extend procgen ahead before we let the frog
@@ -489,9 +535,9 @@ public final class HopperState {
         ridingLane = nil
         ridingEntity = nil
 
-        // Classic-only: reaching the goal row immediately wins. Endless
-        // has no win condition — keep climbing.
-        if mode == .classic && frogY <= Self.goalRow {
+        // Classic + Night Shift: reaching the goal row immediately
+        // wins. Endless has no win condition — keep climbing.
+        if mode != .endless && frogY <= Self.goalRow {
             win()
             return
         }
@@ -504,8 +550,9 @@ public final class HopperState {
     public func tick() {
         guard phase == .playing else { return }
         switch mode {
-        case .classic: classicTick()
-        case .endless: endlessTick()
+        case .classic:    classicTick()
+        case .endless:    endlessTick()
+        case .nightShift: nightShiftTick()
         }
     }
 
@@ -580,12 +627,56 @@ public final class HopperState {
         resolveFrogVsLanes(isHopping: false)
     }
 
+    // MARK: - Night Shift mode tick
+
+    /// Night Shift: Classic crossing but with a 10-second day/night
+    /// cycle. The visibility is hard-flipped at the half-cycle mark
+    /// (the view dims everything outside a lantern zone around the
+    /// frog and adds car headlights). Traffic slows to 65% normal
+    /// speed during the night phase so the player has a chance to
+    /// push when the lights drop.
+    private func nightShiftTick() {
+        // Advance the cycle counter (wraps at the cycle length).
+        nightShiftCycleTick = (nightShiftCycleTick + 1) % Self.nightShiftCycleLen
+
+        // Tick the per-crossing clock (same as Classic).
+        if timeRemainingTicks > 0 {
+            timeRemainingTicks -= 1
+        }
+        if timeRemainingTicks <= 0 {
+            die(.timeUp)
+            return
+        }
+
+        // Smooth speed interpolation: day (1.0) → night (0.65) and back
+        // tracks `nightProgress` so traffic glides between phases.
+        let p = nightProgress
+        let multiplier = 1.0 - (1.0 - Self.nightSpeedMultiplier) * p
+        advanceEntities(speedMultiplier: multiplier)
+
+        // Log-ride drift, with the same smoothly-interpolated multiplier.
+        if let li = ridingLane, let ei = ridingEntity,
+           lanes.indices.contains(li), entities[li].indices.contains(ei) {
+            let lane = lanes[li]
+            let delta = ((lane.direction == .right) ? lane.speed : -lane.speed) * multiplier
+            frogPixelX += delta
+            frogX = Int(frogPixelX.rounded())
+            if frogPixelX < -0.5 || frogPixelX > Double(Self.cols) - 0.5 {
+                die(.carriedOff)
+                return
+            }
+        }
+
+        resolveFrogVsLanes(isHopping: false)
+    }
+
     // MARK: - Internals
 
-    private func advanceEntities() {
+    private func advanceEntities(speedMultiplier: Double = 1.0) {
         for li in lanes.indices {
             let lane = lanes[li]
-            let delta = (lane.direction == .right) ? lane.speed : -lane.speed
+            let baseDelta = (lane.direction == .right) ? lane.speed : -lane.speed
+            let delta = baseDelta * speedMultiplier
             // Total wrap span includes the entity's own width so a
             // departing entity wraps when it's fully off-screen rather
             // than the moment its left edge crosses the boundary.

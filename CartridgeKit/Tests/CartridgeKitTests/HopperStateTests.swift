@@ -227,6 +227,84 @@ struct HopperStateTests {
             #expect(newTop < initialTop)   // more rows generated above
         }
     }
+
+    // MARK: - Night Shift mode
+
+    @Test func nightShiftStartsInDayPhase() {
+        let state = HopperState()
+        state.startRun(.nightShift)
+        #expect(state.mode == .nightShift)
+        #expect(state.lives == HopperState.classicLives)
+        #expect(state.timeRemainingTicks == HopperState.classicTimeTicks)
+        #expect(state.nightShiftCycleTick == 0)
+        #expect(state.isNightPhase == false)
+    }
+
+    @Test func nightShiftFadesFromDayToNight() {
+        let state = HopperState()
+        state.startRun(.nightShift)
+        let half = HopperState.nightShiftCycleLen / 2
+        let fade = HopperState.nightFadeTicks
+        // Ticks 0..<(half - fade) are pure day — fade hasn't started.
+        for _ in 0..<(half - fade - 1) {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        if state.phase == .playing {
+            #expect(state.nightProgress == 0)
+            #expect(state.isNightPhase == false)
+        }
+        // Tick all the way to the end of the fade — should be full night.
+        for _ in 0..<(fade + 2) {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        if state.phase == .playing {
+            #expect(state.nightProgress == 1)
+            #expect(state.isNightPhase == true)
+        }
+    }
+
+    @Test func nightProgressRampsAcrossFadeWindow() {
+        let state = HopperState()
+        state.startRun(.nightShift)
+        let half = HopperState.nightShiftCycleLen / 2
+        let fade = HopperState.nightFadeTicks
+        // Land on the middle of the fade window.
+        for _ in 0..<(half - fade / 2) {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        if state.phase == .playing {
+            // ~half-way through the fade → nightProgress around 0.5.
+            #expect(state.nightProgress > 0.3 && state.nightProgress < 0.7)
+        }
+    }
+
+    @Test func nightShiftUsesClassicLaneLayout() {
+        let stateA = HopperState()
+        stateA.startRun(.classic)
+        let stateB = HopperState()
+        stateB.startRun(.nightShift)
+        // Same row + kind sequence across modes.
+        #expect(stateA.lanes.count == stateB.lanes.count)
+        for (a, b) in zip(stateA.lanes, stateB.lanes) {
+            #expect(a.row == b.row)
+            #expect(a.kind == b.kind)
+        }
+    }
+
+    @Test func nightShiftIsNightPhaseFalseInOtherModes() {
+        let state = HopperState()
+        state.startRun(.classic)
+        // Force the cycle counter past the midpoint and confirm the
+        // flag stays false outside .nightShift mode.
+        for _ in 0..<HopperState.nightShiftCycleLen {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        #expect(state.isNightPhase == false)
+    }
 }
 
 /// Deterministic RNG for reproducible Endless procgen in tests.
