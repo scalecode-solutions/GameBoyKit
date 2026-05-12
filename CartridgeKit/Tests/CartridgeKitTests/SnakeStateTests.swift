@@ -277,6 +277,68 @@ struct SnakeStateTests {
         #expect(SnakeState.TreasureKind.x2.label == "x2")
         #expect(SnakeState.TreasureKind.x50.label == "x50")
     }
+
+    // MARK: - Crusher mode
+
+    @Test func crusherStartsWithThreeSmashers() {
+        let state = SnakeState(rng: SeededRNG(seed: 5))
+        state.startRun(.crusher)
+        #expect(state.mode == .crusher)
+        #expect(state.smashers.count == 3)
+        // All start synchronized in the open phase.
+        for s in state.smashers {
+            #expect(s.phase == .open)
+            #expect(s.phaseTick == 0)
+        }
+    }
+
+    @Test func smasherPhasesProgressOnAnimationTicks() {
+        let state = SnakeState(rng: SeededRNG(seed: 5))
+        state.startRun(.crusher)
+        // Open phase covers ticks 0..<closingStart (= 60)
+        for _ in 0..<SnakeState.Smasher.closingStart - 1 { state.bumpAnimationTick() }
+        #expect(state.smashers[0].phase == .open)
+        // One more tick should flip to closing.
+        state.bumpAnimationTick()
+        #expect(state.smashers[0].phase == .closing)
+        // Advance to closed.
+        while state.smashers[0].phaseTick < SnakeState.Smasher.closedStart {
+            state.bumpAnimationTick()
+        }
+        #expect(state.smashers[0].phase == .closed)
+    }
+
+    @Test func crusherSmasherClosingOnHeadKills() {
+        let state = SnakeState(rng: SeededRNG(seed: 5))
+        state.startRun(.crusher)
+        // Smasher #3 sits at (16, 14). Snake spawns centered at
+        // (16, 10) facing right. Turn down + step 4 → head at (16, 14).
+        state.turn(.down)
+        for _ in 0..<4 { state.tick() }
+        #expect(state.snake[0] == SnakeState.GridPoint(x: 16, y: 14))
+        // Advance the smasher cycle to the closed-phase rising edge.
+        for _ in 0..<SnakeState.Smasher.closedStart { state.bumpAnimationTick() }
+        #expect(state.phase == .dead)
+    }
+
+    @Test func crusherSmasherClosingMidSnakeCuts() {
+        let state = SnakeState(rng: SeededRNG(seed: 5))
+        state.startRun(.crusher)
+        // Position the snake so its middle segment sits on the
+        // smasher anchor while the head is past it.
+        state.turn(.down)
+        for _ in 0..<4 { state.tick() }     // head at (16, 14)
+        state.turn(.right)
+        state.tick()                         // head at (17, 14); snake[1] at (16, 14)
+        if state.phase != .playing { return }     // bail if food collision changed shape
+        #expect(state.snake.count >= 2)
+        #expect(state.snake[1] == SnakeState.GridPoint(x: 16, y: 14))
+        let lengthBefore = state.snake.count
+        // Drive the smasher into its closed phase.
+        for _ in 0..<SnakeState.Smasher.closedStart { state.bumpAnimationTick() }
+        #expect(state.phase == .playing)            // snake survived
+        #expect(state.snake.count < lengthBefore)   // tail vanished at cut point
+    }
 }
 
 /// Deterministic RNG for reproducible food placement in tests.

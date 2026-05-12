@@ -31,12 +31,14 @@ public final class SnakeState {
     public enum Mode: String, CaseIterable, Sendable, Codable {
         case classic
         case portals
-        // case crusher, gauntlet — coming in later iterations.
+        case crusher
+        // case gauntlet — coming in the next iteration.
 
         public var displayName: String {
             switch self {
             case .classic: return "CLASSIC"
             case .portals: return "PORTALS"
+            case .crusher: return "CRUSHER"
             }
         }
 
@@ -44,6 +46,7 @@ public final class SnakeState {
             switch self {
             case .classic: return "EAT. GROW. AVOID YOURSELF."
             case .portals: return "WARP. HEIST THE VAULT. ESCAPE."
+            case .crusher: return "DODGE THE STAMPS. TIME A CUT."
             }
         }
     }
@@ -97,6 +100,43 @@ public final class SnakeState {
         case uninitialized   // never visited
         case fresh           // generated, treasure present, hasn't been picked up
         case resolved        // treasure picked up + delivered/lost; re-roll on next entry
+    }
+
+    /// Smashing-block pair for Crusher / Gauntlet modes. Each smasher
+    /// cycles open → closing → closed → opening repeatedly. When the
+    /// `closed` phase fires, the smasher's anchor cell is checked
+    /// against the snake: head there = die, mid-snake = cut.
+    public struct Smasher: Sendable {
+        public enum Orientation: Sendable { case vertical, horizontal }
+        public enum Phase: Sendable { case open, closing, closed, opening }
+
+        public var x: Int
+        public var y: Int
+        public var orientation: Orientation
+        /// Where in the cycle this smasher currently is (0..<cycleLen).
+        public var phaseTick: Int
+
+        public var phase: Phase {
+            switch phaseTick {
+            case Smasher.openStart..<Smasher.closingStart:  return .open
+            case Smasher.closingStart..<Smasher.closedStart: return .closing
+            case Smasher.closedStart..<Smasher.openingStart: return .closed
+            default:                                         return .opening
+            }
+        }
+
+        /// Tick offsets that define phase boundaries.
+        public static let openStart    = 0
+        public static let closingStart = 60      // open phase: 60 ticks (~1s)
+        public static let closedStart  = 76      // closing: 16 ticks (~0.27s)
+        public static let openingStart = 100     // closed: 24 ticks (~0.4s)
+        public static let cycleLen     = 120     // opening: 20 ticks; total: 2s @ 60Hz
+
+        public init(x: Int, y: Int, orientation: Orientation, phaseTick: Int = 0) {
+            self.x = x; self.y = y
+            self.orientation = orientation
+            self.phaseTick = phaseTick
+        }
     }
 
     public enum Phase: Equatable, Sendable {
@@ -186,6 +226,22 @@ public final class SnakeState {
     /// treasure sprite's twinkle animation. Advanced by the view.
     public private(set) var animationTick: Int = 0
 
+    // MARK: - Crusher-mode state
+
+    /// Smasher pairs active on the main map (Crusher mode only — and
+    /// later Gauntlet). All smashers share the same phase cycle so
+    /// the player learns a single rhythm.
+    public private(set) var smashers: [Smasher] = []
+
+    // MARK: - Effects
+
+    /// Screen-shake — triggered on a snake death or a smasher cut.
+    public internal(set) var cameraShake: CameraShake = CameraShake()
+
+    /// Particle system — used for cut bursts (segments behind a cut
+    /// point spray out into pixels).
+    public internal(set) var particles: ParticleSystem = ParticleSystem()
+
     // RNG seam — lets tests inject deterministic food placement.
     @ObservationIgnored
     private var rng: any RandomNumberGenerator
@@ -261,9 +317,16 @@ public final class SnakeState {
         sideMapTreasure = nil
         sideMapState = .uninitialized
         isCarryingTreasure = false
+        // Reset Crusher state.
+        smashers = []
+        // Clear effects so they don't bleed across runs.
+        particles.clear()
+        cameraShake = CameraShake()
         // Mode-specific setup.
-        if mode == .portals {
-            setupPortalsMode()
+        switch mode {
+        case .classic: break
+        case .portals: setupPortalsMode()
+        case .crusher: setupCrusherMode()
         }
         phase = .playing
         spawnFood()
@@ -271,9 +334,24 @@ public final class SnakeState {
 
     /// Called by the view each animation frame (60Hz) to drive
     /// per-frame visual effects (treasure twinkle, carry-indicator
-    /// pulse). Independent of the game tick.
+    /// pulse, smasher animation, particle decay). Independent of the
+    /// game tick.
     public func bumpAnimationTick() {
         animationTick &+= 1
+        // Advance every smasher's phaseTick (synchronized cycle).
+        for i in smashers.indices {
+            smashers[i].phaseTick = (smashers[i].phaseTick + 1) % Smasher.cycleLen
+        }
+        // Check for new smasher closures — if the snake is inside the
+        // closed-cell of a smasher transitioning into `.closed` this
+        // frame, cut or kill.
+        if mode == .crusher && phase == .playing {
+            resolveSmasherImpacts()
+        }
+        // Effects decay regardless of phase so death/cut animations
+        // can complete after the result banner appears.
+        cameraShake.tick()
+        particles.tick()
     }
 
     // MARK: - Portals mode setup
@@ -392,6 +470,62 @@ public final class SnakeState {
     /// without needing to lay body cells off-screen.
     private func collapseSnake(at head: GridPoint) {
         snake = Array(repeating: head, count: snake.count)
+    }
+
+    // MARK: - Crusher mode setup
+
+    /// Three smashers at fixed positions on the main map, all sharing
+    /// the same cycle phase so the player learns a single rhythm.
+    /// Two vertical + one horizontal so the threat orientation varies.
+    private func setupCrusherMode() {
+        smashers = [
+            Smasher(x: 10, y: 8,  orientation: .vertical,   phaseTick: 0),
+            Smasher(x: 22, y: 8,  orientation: .vertical,   phaseTick: 0),
+            Smasher(x: 16, y: 14, orientation: .horizontal, phaseTick: 0),
+        ]
+    }
+
+    /// Each frame the smasher is in its `.closed` phase, check whether
+    /// any snake segment occupies the smasher's anchor cell. Head =
+    /// die. Mid-snake = cut (segments behind the cut point drop off,
+    /// score retained, particle burst at cut location, screen shake).
+    /// Fires only on the FIRST tick of the closed phase so a single
+    /// closure doesn't multi-cut as the smasher idles closed.
+    private func resolveSmasherImpacts() {
+        for s in smashers {
+            // Only fire on the rising edge of `closed` so one closure
+            // = at most one cut/kill.
+            guard s.phaseTick == Smasher.closedStart else { continue }
+            let target = GridPoint(x: s.x, y: s.y)
+            guard let idx = snake.firstIndex(of: target) else { continue }
+            if idx == 0 {
+                // Head crushed.
+                cameraShake.trigger(amplitude: 4.5, ticks: 18)
+                die()
+                return
+            } else {
+                // Mid-snake cut. Keep [0..<idx], remove [idx..].
+                let cutLength = snake.count - idx
+                snake = Array(snake.prefix(idx))
+                spawnCutBurst(at: target, segments: cutLength)
+                cameraShake.trigger(amplitude: 3.0, ticks: 14)
+            }
+        }
+    }
+
+    /// Spawn a particle puff at the cut point — one particle per
+    /// vanished segment, fanning out + downward for a "scattering"
+    /// look. Pixel coords map to the cell × 8 sprite grid.
+    private func spawnCutBurst(at cell: GridPoint, segments: Int) {
+        let px = Double(cell.x * 8 + 4)
+        let py = Double(cell.y * 8 + 4)
+        particles.burst(
+            at: (x: px, y: py),
+            count: min(segments * 2, 20),
+            speedRange: 0.6...1.8,
+            lifeRange: 16...28,
+            upwardBias: 0.2
+        )
     }
 
     /// Triggered when the snake head crosses the active 2-wide gateway.
@@ -526,11 +660,15 @@ public final class SnakeState {
     // MARK: - Internals
 
     /// Centralized death path — flips phase, forfeits any in-flight
-    /// treasure (heist lost), and records the final score to the
-    /// per-cartridge best-score store if it beats the existing record
-    /// for this mode.
+    /// treasure (heist lost), shakes the screen, and records the
+    /// final score to the per-cartridge best-score store if it beats
+    /// the existing record for this mode.
     private func die() {
         phase = .dead
+        // Trigger a death-shake. `trigger` takes the max of current
+        // and new amplitude so a smasher-head-crush's bigger shake
+        // (already in flight) won't be downgraded here.
+        cameraShake.trigger(amplitude: 3.5, ticks: 14)
         if isCarryingTreasure {
             // Heist failed — bonus forfeited. Side map will re-roll
             // its layout the next time the player enters.

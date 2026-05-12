@@ -32,6 +32,10 @@ public struct SnakeGame: View {
         PixelCanvas { ctx, scale in
             render(into: &ctx, scale: scale)
         }
+        // Screen-shake on death + smasher impacts — only the LCD
+        // contents shake, the surrounding chassis stays stable.
+        .offset(x: CGFloat(state.cameraShake.offsetX),
+                y: CGFloat(state.cameraShake.offsetY))
         .onChange(of: input.dpad) { _, dir in
             guard powerOn else { return }
             handleDpad(dir)
@@ -388,6 +392,11 @@ public struct SnakeGame: View {
             drawSideMapTreasure(into: &ctx, scale: scale)
         }
 
+        // Smashers (Crusher mode).
+        if state.mode == .crusher {
+            drawSmashers(into: &ctx, scale: scale)
+        }
+
         // Food (small 6×6 within an 8-cell, slightly offset)
         let food = state.food
         ctx.fillPixel(x: food.x * 8 + 1, y: food.y * 8 + 1, width: 6, height: 6,
@@ -406,6 +415,9 @@ public struct SnakeGame: View {
         if state.mode == .portals && state.isCarryingTreasure {
             drawCarryIndicator(into: &ctx, scale: scale)
         }
+
+        // Particles (cut bursts) drawn last so they sit on top.
+        drawParticles(into: &ctx, scale: scale)
 
         // Pause / death overlay
         switch state.phase {
@@ -584,6 +596,129 @@ public struct SnakeGame: View {
                         y: CGFloat(labelY) * scale.height),
             anchor: .leading
         )
+    }
+
+    // MARK: - Crusher visuals
+
+    /// Render every smasher in its current phase. Two industrial
+    /// blocks slide together at the anchor cell; the `closed` phase
+    /// is the danger frame where the snake gets cut/killed.
+    private func drawSmashers(into ctx: inout GraphicsContext, scale: CGSize) {
+        for s in state.smashers {
+            drawSmasher(into: &ctx, scale: scale, smasher: s)
+        }
+    }
+
+    private func drawSmasher(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        smasher s: SnakeState.Smasher
+    ) {
+        // Compute closing-progress in [0, 1]. 0 = fully open, 1 = closed.
+        let t: Double
+        switch s.phase {
+        case .open:
+            t = 0
+        case .closing:
+            let n = Double(SnakeState.Smasher.closedStart - SnakeState.Smasher.closingStart)
+            t = Double(s.phaseTick - SnakeState.Smasher.closingStart) / n
+        case .closed:
+            t = 1
+        case .opening:
+            let n = Double(SnakeState.Smasher.cycleLen - SnakeState.Smasher.openingStart)
+            t = 1 - Double(s.phaseTick - SnakeState.Smasher.openingStart) / n
+        }
+
+        let anchorPx = s.x * 8
+        let anchorPy = s.y * 8
+
+        switch s.orientation {
+        case .vertical:
+            // Top block slides DOWN as t→1; bottom block slides UP.
+            // Open: top at y-1, bottom at y+1 (8px above/below anchor).
+            // Closed: both meet at anchor.
+            let slide = Int((Double(8) * t).rounded())
+            let topY    = anchorPy - 8 + slide
+            let bottomY = anchorPy + 8 - slide
+            drawSmasherBlock(into: &ctx, scale: scale, x: anchorPx, y: topY,    orientation: .vertical, side: .top)
+            drawSmasherBlock(into: &ctx, scale: scale, x: anchorPx, y: bottomY, orientation: .vertical, side: .bottom)
+        case .horizontal:
+            // Left block slides RIGHT; right block slides LEFT.
+            let slide = Int((Double(8) * t).rounded())
+            let leftX  = anchorPx - 8 + slide
+            let rightX = anchorPx + 8 - slide
+            drawSmasherBlock(into: &ctx, scale: scale, x: leftX,  y: anchorPy, orientation: .horizontal, side: .top)
+            drawSmasherBlock(into: &ctx, scale: scale, x: rightX, y: anchorPy, orientation: .horizontal, side: .bottom)
+        }
+
+        // Closed-frame flash: paint a single full-cell danger square
+        // at the anchor so the closure reads as IMPACT, not just two
+        // blocks meeting up.
+        if s.phase == .closed {
+            ctx.fillPixel(x: anchorPx, y: anchorPy, width: 8, height: 8,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: anchorPx + 2, y: anchorPy + 2, width: 4, height: 4,
+                          color: palette.lcdShade1, scale: scale)
+        }
+    }
+
+    private enum SmasherSide { case top, bottom }
+
+    private func drawSmasherBlock(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        x: Int, y: Int,
+        orientation: SnakeState.Smasher.Orientation,
+        side: SmasherSide
+    ) {
+        // Body — slightly inset so adjacent cells don't merge visually.
+        ctx.fillPixel(x: x, y: y, width: 8, height: 8,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + 1, y: y + 1, width: 6, height: 6,
+                      color: palette.lcdShade2, scale: scale)
+        // "Stamping face" — the side that points toward the anchor.
+        switch (orientation, side) {
+        case (.vertical, .top):
+            ctx.fillPixel(x: x, y: y + 7, width: 8, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+            // Bolt accents
+            ctx.fillPixel(x: x + 2, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        case (.vertical, .bottom):
+            ctx.fillPixel(x: x, y: y, width: 8, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        case (.horizontal, .top):
+            ctx.fillPixel(x: x + 7, y: y, width: 1, height: 8,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        case (.horizontal, .bottom):
+            ctx.fillPixel(x: x, y: y, width: 1, height: 8,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade0, scale: scale)
+        }
+    }
+
+    /// Pixel-particle render with alpha fade based on remaining life.
+    private func drawParticles(into ctx: inout GraphicsContext, scale: CGSize) {
+        for p in state.particles.particles {
+            let alpha = min(1.0, Double(p.life) / 8.0)
+            let color = palette.lcdShade3.opacity(alpha)
+            let px = Int(p.x.rounded())
+            let py = Int(p.y.rounded())
+            let size = p.life > p.initialLife / 2 ? 2 : 1
+            ctx.fillPixel(x: px, y: py, width: size, height: size,
+                          color: color, scale: scale)
+        }
     }
 
     /// Pulsing pixel on top of the snake's head + subtle sparkles
