@@ -32,6 +32,10 @@ public struct LanderGame: View {
         PixelCanvas { ctx, scale in
             render(into: &ctx, scale: scale)
         }
+        // Screen-shake offset on impacts — only applies to the LCD
+        // contents (the chassis around it stays stable).
+        .offset(x: CGFloat(state.cameraShake.offsetX),
+                y: CGFloat(state.cameraShake.offsetY))
         .onChange(of: input.aPressed) { _, pressed in
             guard powerOn, pressed else { return }
             handleAPress()
@@ -104,17 +108,18 @@ public struct LanderGame: View {
             if Task.isCancelled { return }
             animTick &+= 1
 
-            // Only step physics when actively playing.
-            guard state.phase == .playing else { continue }
-
-            // Sample held inputs.
-            let mainHeld = input.aPressed || (input.dpad?.isUp ?? false)
-            let lateral: Int = {
-                if input.dpad?.isLeft  == true { return -1 }
-                if input.dpad?.isRight == true { return  1 }
-                return 0
-            }()
-            state.applyInput(mainThrust: mainHeld, lateral: lateral)
+            // Sample inputs only while actively playing — but always
+            // tick state so screen-shake effects animate even in the
+            // result-banner phase.
+            if state.phase == .playing {
+                let mainHeld = input.aPressed || (input.dpad?.isUp ?? false)
+                let lateral: Int = {
+                    if input.dpad?.isLeft  == true { return -1 }
+                    if input.dpad?.isRight == true { return  1 }
+                    return 0
+                }()
+                state.applyInput(mainThrust: mainHeld, lateral: lateral)
+            }
             state.tick()
         }
     }

@@ -171,6 +171,11 @@ public final class HopperState {
     /// the "NEW BEST!" flag on the result banner.
     public private(set) var isNewBest: Bool = false
 
+    /// Screen-shake effect — triggered on death (car / drown / cone),
+    /// the view reads `offsetX` / `offsetY` and applies them to the
+    /// LCD.
+    public internal(set) var cameraShake: CameraShake = CameraShake()
+
     /// Cartridge identifier used as the `CartridgeScores` key.
     public static let cartridgeId = "hopper"
 
@@ -631,6 +636,9 @@ public final class HopperState {
     // MARK: - Tick
 
     public func tick() {
+        // Effects tick regardless of phase so a death's screen shake
+        // completes even after the result banner appears.
+        cameraShake.tick()
         guard phase == .playing else { return }
         switch mode {
         case .classic:    classicTick()
@@ -908,6 +916,11 @@ public final class HopperState {
     private func die(_ cause: DeathCause) {
         lastDeath = cause
         lives -= 1
+        // Every death (fatal or respawn) shakes the screen — sells
+        // the hit. Cone-spot deaths shake a bit less than physical
+        // car/drown hits since they're surveillance-y, not crunchy.
+        let amplitude: Double = (cause == .spotted) ? 2.0 : 3.0
+        cameraShake.trigger(amplitude: amplitude, ticks: 12)
         if lives <= 0 {
             phase = .dead
             recordCurrentScore()

@@ -33,6 +33,10 @@ public struct HopperGame: View {
         PixelCanvas { ctx, scale in
             render(into: &ctx, scale: scale)
         }
+        // Screen-shake on death events — only the LCD contents shake,
+        // the surrounding chassis stays stable.
+        .offset(x: CGFloat(state.cameraShake.offsetX),
+                y: CGFloat(state.cameraShake.offsetY))
         .onChange(of: input.aPressed) { _, pressed in
             guard powerOn, pressed else { return }
             handleAPress()
@@ -124,7 +128,9 @@ public struct HopperGame: View {
             try? await Task.sleep(for: dt)
             if Task.isCancelled { return }
             animTick &+= 1
-            guard state.phase == .playing else { continue }
+            // Always tick state so screen-shake animates even in the
+            // result phase; tick() internally guards on .playing for
+            // the gameplay dispatch.
             state.tick()
         }
     }

@@ -148,6 +148,10 @@ public final class LanderState {
     /// on the result banner as "NEW BEST!".
     public private(set) var isNewBest: Bool = false
 
+    /// Screen-shake effect — triggered on crashes; the view reads
+    /// `offsetX` / `offsetY` and applies them to the LCD.
+    public internal(set) var cameraShake: CameraShake = CameraShake()
+
     /// Cartridge identifier used as the `CartridgeScores` key.
     public static let cartridgeId = "lander"
 
@@ -491,9 +495,12 @@ public final class LanderState {
 
     // MARK: - Tick
 
-    /// Advance one physics step. The view calls this at ~60Hz while
-    /// `.playing`. Idempotent in any other phase. Dispatches by mode.
+    /// Advance one physics step. The view calls this at ~60Hz every
+    /// frame — screen-shake effects advance regardless of phase so a
+    /// crash's shake completes even after the result banner appears.
+    /// Physics dispatch only fires while `.playing`.
     public func tick() {
+        cameraShake.tick()
         guard phase == .playing else { return }
         switch mode {
         case .classic:  classicTick()
@@ -896,6 +903,11 @@ public final class LanderState {
         thetaDot = 0
         phase = .crashed
         recordCurrentScore()
+        // Shake harder on harder impacts — amplitude scales linearly
+        // with impact up to a cap so a gentle whiff isn't the same as
+        // a full smash.
+        let amplitude = min(5.0, 2.0 + impact * 2.0)
+        cameraShake.trigger(amplitude: amplitude, ticks: 16)
     }
 
     /// Persist `score` as the new per-mode best if it exceeds the
