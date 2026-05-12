@@ -4,8 +4,33 @@ import Testing
 @MainActor
 struct SnakeStateTests {
 
-    @Test func startsCenteredFacingRight() {
+    @Test func startsOnTitle() {
         let state = SnakeState()
+        #expect(state.phase == .title)
+        #expect(state.mode == .classic)
+        #expect(state.modeSelectCursor == 0)
+        #expect(state.snake.isEmpty)
+    }
+
+    @Test func openModeSelectAdvances() {
+        let state = SnakeState()
+        state.openModeSelect()
+        #expect(state.phase == .modeSelect)
+    }
+
+    @Test func confirmingStartsRun() {
+        let state = SnakeState()
+        state.openModeSelect()
+        state.confirmModeSelection()
+        #expect(state.phase == .playing)
+        #expect(state.snake.count == 3)
+        #expect(state.direction == .right)
+        #expect(state.score == 0)
+    }
+
+    @Test func startRunCentersAndFacesRight() {
+        let state = SnakeState()
+        state.startRun(.classic)
         #expect(state.snake.count == 3)
         #expect(state.direction == .right)
         #expect(state.phase == .playing)
@@ -17,6 +42,7 @@ struct SnakeStateTests {
 
     @Test func tickMovesHeadInDirection() {
         let state = SnakeState()
+        state.startRun(.classic)
         let head0 = state.snake[0]
         state.tick()
         let head1 = state.snake[0]
@@ -26,6 +52,7 @@ struct SnakeStateTests {
 
     @Test func turningChangesDirectionOnNextTick() {
         let state = SnakeState()
+        state.startRun(.classic)
         state.turn(.up)
         // Direction doesn't flip immediately — it's pending until tick.
         #expect(state.direction == .right)
@@ -35,6 +62,7 @@ struct SnakeStateTests {
 
     @Test func cannotReverseOntoSelf() {
         let state = SnakeState()
+        state.startRun(.classic)
         state.turn(.left)   // Currently moving right; this should be ignored
         state.tick()
         #expect(state.direction == .right)
@@ -42,6 +70,7 @@ struct SnakeStateTests {
 
     @Test func wallCollisionEndsGame() {
         let state = SnakeState()
+        state.startRun(.classic)
         // Drive into the right wall.
         for _ in 0..<SnakeState.cols { state.tick() }
         #expect(state.phase == .dead)
@@ -50,6 +79,7 @@ struct SnakeStateTests {
     @Test func eatingFoodGrowsAndScores() {
         // Use a deterministic RNG; first food position will be reproducible.
         let state = SnakeState(rng: SeededRNG(seed: 42))
+        state.startRun(.classic)
         let initialLength = state.snake.count
         let initialScore = state.score
 
@@ -74,6 +104,7 @@ struct SnakeStateTests {
 
     @Test func pauseTogglesPhase() {
         let state = SnakeState()
+        state.startRun(.classic)
         state.togglePause()
         #expect(state.phase == .paused)
         // Tick while paused is a no-op
@@ -84,14 +115,55 @@ struct SnakeStateTests {
         #expect(state.phase == .playing)
     }
 
-    @Test func resetRestoresFreshState() {
+    @Test func retryRestartsFreshGame() {
         let state = SnakeState()
-        for _ in 0..<5 { state.tick() }
-        state.reset()
+        state.startRun(.classic)
+        // Drive into the wall to die.
+        for _ in 0..<SnakeState.cols { state.tick() }
+        #expect(state.phase == .dead)
+        state.retryRun()
+        #expect(state.phase == .playing)
         #expect(state.snake.count == 3)
         #expect(state.score == 0)
-        #expect(state.phase == .playing)
         #expect(state.direction == .right)
+    }
+
+    @Test func exitToModeSelectFromPausedSucceeds() {
+        let state = SnakeState()
+        state.startRun(.classic)
+        state.togglePause()
+        #expect(state.phase == .paused)
+        state.exitToModeSelect()
+        #expect(state.phase == .modeSelect)
+    }
+
+    @Test func exitToModeSelectFromDeadSucceeds() {
+        let state = SnakeState()
+        state.startRun(.classic)
+        for _ in 0..<SnakeState.cols { state.tick() }
+        #expect(state.phase == .dead)
+        state.exitToModeSelect()
+        #expect(state.phase == .modeSelect)
+    }
+
+    @Test func exitToModeSelectFromPlayingIsNoOp() {
+        let state = SnakeState()
+        state.startRun(.classic)
+        let p0 = state.phase
+        state.exitToModeSelect()
+        #expect(state.phase == p0)
+    }
+
+    @Test func modeSelectCursorWrapsWithinAllCases() {
+        let state = SnakeState()
+        state.openModeSelect()
+        let n = SnakeState.Mode.allCases.count
+        // Wrap forward past the end and back to 0.
+        state.moveModeSelectCursor(n)
+        #expect(state.modeSelectCursor == 0)
+        // Wrap backward from 0 to last.
+        state.moveModeSelectCursor(-1)
+        #expect(state.modeSelectCursor == n - 1)
     }
 }
 
