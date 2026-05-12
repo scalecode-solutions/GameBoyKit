@@ -311,7 +311,7 @@ public struct SnakeGame: View {
     private func renderGame(into ctx: inout GraphicsContext, scale: CGSize) {
         // Side-map background tint: a sparse dot pattern in shade1 so
         // the player can tell at a glance which room they're in.
-        if state.mode == .portals && state.inSideMap {
+        if state.mode.hasPortals && state.inSideMap {
             for row in stride(from: SnakeState.playRowStart, to: SnakeState.playRowEnd, by: 2) {
                 for col in stride(from: row % 4, to: SnakeState.cols, by: 4) {
                     ctx.fillPixel(x: col * 8 + 3, y: row * 8 + 3,
@@ -355,7 +355,7 @@ public struct SnakeGame: View {
         // Carry indicator in HUD — when carrying treasure in Portals
         // mode, show the multiplier label so the player remembers the
         // payout they're hauling around.
-        if state.mode == .portals && state.isCarryingTreasure {
+        if state.mode.hasPortals && state.isCarryingTreasure {
             ctx.draw(
                 Text("\(state.carriedTreasureKind.label)")
                     .font(.system(size: 10 * scale.height,
@@ -382,18 +382,19 @@ public struct SnakeGame: View {
 
         // Portals — drawn before the snake so the snake sits on top
         // of the portal sprites.
-        if state.mode == .portals {
+        if state.mode.hasPortals {
             drawPortals(into: &ctx, scale: scale)
         }
 
         // Side-map obstacles + treasure (Portals + inSideMap).
-        if state.mode == .portals && state.inSideMap {
+        if state.mode.hasPortals && state.inSideMap {
             drawSideMapObstacles(into: &ctx, scale: scale)
             drawSideMapTreasure(into: &ctx, scale: scale)
         }
 
-        // Smashers (Crusher mode).
-        if state.mode == .crusher {
+        // Smashers (Crusher / Gauntlet). Hidden while the snake is
+        // in the side map — that's the "rest area" of a heist.
+        if state.mode.hasSmashers && !state.inSideMap {
             drawSmashers(into: &ctx, scale: scale)
         }
 
@@ -412,7 +413,7 @@ public struct SnakeGame: View {
         }
 
         // Carry sparkle trail + head pulse (Portals + carrying).
-        if state.mode == .portals && state.isCarryingTreasure {
+        if state.mode.hasPortals && state.isCarryingTreasure {
             drawCarryIndicator(into: &ctx, scale: scale)
         }
 

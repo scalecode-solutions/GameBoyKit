@@ -32,21 +32,40 @@ public final class SnakeState {
         case classic
         case portals
         case crusher
-        // case gauntlet — coming in the next iteration.
+        case gauntlet
 
         public var displayName: String {
             switch self {
-            case .classic: return "CLASSIC"
-            case .portals: return "PORTALS"
-            case .crusher: return "CRUSHER"
+            case .classic:  return "CLASSIC"
+            case .portals:  return "PORTALS"
+            case .crusher:  return "CRUSHER"
+            case .gauntlet: return "GAUNTLET"
             }
         }
 
         public var briefing: String {
             switch self {
-            case .classic: return "EAT. GROW. AVOID YOURSELF."
-            case .portals: return "WARP. HEIST THE VAULT. ESCAPE."
-            case .crusher: return "DODGE THE STAMPS. TIME A CUT."
+            case .classic:  return "EAT. GROW. AVOID YOURSELF."
+            case .portals:  return "WARP. HEIST THE VAULT. ESCAPE."
+            case .crusher:  return "DODGE THE STAMPS. TIME A CUT."
+            case .gauntlet: return "EVERYTHING AT ONCE. SURVIVE."
+            }
+        }
+
+        /// Whether this mode places 1-wide portal pairs + the 2-wide
+        /// gateway + side-map heist mechanics on the field.
+        public var hasPortals: Bool {
+            switch self {
+            case .portals, .gauntlet: return true
+            default:                   return false
+            }
+        }
+
+        /// Whether this mode places smashers on the field.
+        public var hasSmashers: Bool {
+            switch self {
+            case .crusher, .gauntlet: return true
+            default:                   return false
             }
         }
     }
@@ -322,12 +341,9 @@ public final class SnakeState {
         // Clear effects so they don't bleed across runs.
         particles.clear()
         cameraShake = CameraShake()
-        // Mode-specific setup.
-        switch mode {
-        case .classic: break
-        case .portals: setupPortalsMode()
-        case .crusher: setupCrusherMode()
-        }
+        // Mode-specific setup — Gauntlet runs both.
+        if mode.hasPortals  { setupPortalsMode() }
+        if mode.hasSmashers { setupCrusherMode() }
         phase = .playing
         spawnFood()
     }
@@ -344,8 +360,9 @@ public final class SnakeState {
         }
         // Check for new smasher closures — if the snake is inside the
         // closed-cell of a smasher transitioning into `.closed` this
-        // frame, cut or kill.
-        if mode == .crusher && phase == .playing {
+        // frame, cut or kill. Side-map sojourns are smasher-free so
+        // the player can rest from them while heisting.
+        if mode.hasSmashers && phase == .playing && !inSideMap {
             resolveSmasherImpacts()
         }
         // Effects decay regardless of phase so death/cut animations
@@ -604,7 +621,7 @@ public final class SnakeState {
         // 1-wide portal teleport (Portals mode only). Applied to the
         // raw newHead BEFORE wall checks so a head moving "off" the
         // map at a portal cell teleports instead of dying.
-        if mode == .portals, let warped = portalTeleport(for: newHead) {
+        if mode.hasPortals, let warped = portalTeleport(for: newHead) {
             newHead = warped
         }
 
@@ -619,13 +636,13 @@ public final class SnakeState {
         // moves onto a gateway cell — flips maps + handles treasure
         // delivery on exit. Body collapses to the new gateway anchor
         // so the snake unfurls onto the new map.
-        if mode == .portals && isGatewayCell(newHead) {
+        if mode.hasPortals && isGatewayCell(newHead) {
             crossGateway()
             return
         }
 
         // Side-map obstacle collision = death.
-        if mode == .portals && inSideMap && sideMapObstacles.contains(newHead) {
+        if mode.hasPortals && inSideMap && sideMapObstacles.contains(newHead) {
             die()
             return
         }
@@ -641,7 +658,7 @@ public final class SnakeState {
         // Treasure pickup (Portals side map only). The treasure
         // vanishes; carry state activates; bonus is realized only when
         // the snake exits back through the side gateway.
-        if mode == .portals && inSideMap,
+        if mode.hasPortals && inSideMap,
            let t = sideMapTreasure, newHead == t {
             sideMapTreasure = nil
             isCarryingTreasure = true
@@ -687,7 +704,7 @@ public final class SnakeState {
 
         // Build the set of cells the food can't occupy.
         var blocked = Set(snake)
-        if mode == .portals && inSideMap {
+        if mode.hasPortals && inSideMap {
             for o in sideMapObstacles { blocked.insert(o) }
             if let t = sideMapTreasure { blocked.insert(t) }
         }

@@ -321,6 +321,44 @@ struct SnakeStateTests {
         #expect(state.phase == .dead)
     }
 
+    // MARK: - Gauntlet mode
+
+    @Test func gauntletHasPortalsAndSmashers() {
+        let state = SnakeState(rng: SeededRNG(seed: 9))
+        state.startRun(.gauntlet)
+        #expect(state.mode == .gauntlet)
+        // Portals layout active.
+        #expect(state.portalPairs.count == 2)
+        #expect(state.mainGateway != nil)
+        #expect(state.sideGateway != nil)
+        // Smashers also active.
+        #expect(state.smashers.count == 3)
+        // Both feature flags agree with the mode.
+        #expect(state.mode.hasPortals == true)
+        #expect(state.mode.hasSmashers == true)
+    }
+
+    @Test func classicHasNeitherPortalsNorSmashers() {
+        let state = SnakeState()
+        state.startRun(.classic)
+        #expect(state.portalPairs.isEmpty)
+        #expect(state.smashers.isEmpty)
+        #expect(state.mode.hasPortals == false)
+        #expect(state.mode.hasSmashers == false)
+    }
+
+    @Test func modeFeatureFlagsAreOrthogonal() {
+        // Sanity-check the four hasPortals × hasSmashers permutations.
+        #expect(SnakeState.Mode.classic.hasPortals  == false)
+        #expect(SnakeState.Mode.classic.hasSmashers == false)
+        #expect(SnakeState.Mode.portals.hasPortals  == true)
+        #expect(SnakeState.Mode.portals.hasSmashers == false)
+        #expect(SnakeState.Mode.crusher.hasPortals  == false)
+        #expect(SnakeState.Mode.crusher.hasSmashers == true)
+        #expect(SnakeState.Mode.gauntlet.hasPortals == true)
+        #expect(SnakeState.Mode.gauntlet.hasSmashers == true)
+    }
+
     @Test func crusherSmasherClosingMidSnakeCuts() {
         let state = SnakeState(rng: SeededRNG(seed: 5))
         state.startRun(.crusher)
