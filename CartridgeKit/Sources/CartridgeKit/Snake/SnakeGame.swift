@@ -136,6 +136,7 @@ public struct SnakeGame: View {
             try? await Task.sleep(for: dt)
             if Task.isCancelled { return }
             animTick &+= 1
+            state.bumpAnimationTick()
         }
     }
 
@@ -304,6 +305,18 @@ public struct SnakeGame: View {
     // MARK: - Gameplay scene
 
     private func renderGame(into ctx: inout GraphicsContext, scale: CGSize) {
+        // Side-map background tint: a sparse dot pattern in shade1 so
+        // the player can tell at a glance which room they're in.
+        if state.mode == .portals && state.inSideMap {
+            for row in stride(from: SnakeState.playRowStart, to: SnakeState.playRowEnd, by: 2) {
+                for col in stride(from: row % 4, to: SnakeState.cols, by: 4) {
+                    ctx.fillPixel(x: col * 8 + 3, y: row * 8 + 3,
+                                  width: 2, height: 2,
+                                  color: palette.lcdShade1, scale: scale)
+                }
+            }
+        }
+
         // HUD bar (top 24 px = 3 cells)
         ctx.fillPixel(x: 0, y: 0, width: 256, height: 23,
                       color: palette.lcdShade1, scale: scale)
@@ -330,7 +343,22 @@ public struct SnakeGame: View {
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: 156 * scale.width, y: 12 * scale.height),
+                at: CGPoint(x: 134 * scale.width, y: 12 * scale.height),
+                anchor: .leading
+            )
+        }
+
+        // Carry indicator in HUD — when carrying treasure in Portals
+        // mode, show the multiplier label so the player remembers the
+        // payout they're hauling around.
+        if state.mode == .portals && state.isCarryingTreasure {
+            ctx.draw(
+                Text("\(state.carriedTreasureKind.label)")
+                    .font(.system(size: 10 * scale.height,
+                                  weight: .black,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 210 * scale.width, y: 12 * scale.height),
                 anchor: .leading
             )
         }
@@ -348,6 +376,18 @@ public struct SnakeGame: View {
                           color: indicatorColor, scale: scale)
         }
 
+        // Portals — drawn before the snake so the snake sits on top
+        // of the portal sprites.
+        if state.mode == .portals {
+            drawPortals(into: &ctx, scale: scale)
+        }
+
+        // Side-map obstacles + treasure (Portals + inSideMap).
+        if state.mode == .portals && state.inSideMap {
+            drawSideMapObstacles(into: &ctx, scale: scale)
+            drawSideMapTreasure(into: &ctx, scale: scale)
+        }
+
         // Food (small 6×6 within an 8-cell, slightly offset)
         let food = state.food
         ctx.fillPixel(x: food.x * 8 + 1, y: food.y * 8 + 1, width: 6, height: 6,
@@ -360,6 +400,11 @@ public struct SnakeGame: View {
             let color: Color = (i == 0) ? palette.lcdShade3 : palette.lcdShade2
             ctx.fillPixel(x: segment.x * 8 + 1, y: segment.y * 8 + 1,
                           width: 6, height: 6, color: color, scale: scale)
+        }
+
+        // Carry sparkle trail + head pulse (Portals + carrying).
+        if state.mode == .portals && state.isCarryingTreasure {
+            drawCarryIndicator(into: &ctx, scale: scale)
         }
 
         // Pause / death overlay
@@ -377,6 +422,192 @@ public struct SnakeGame: View {
                                  subtitle: subtitle)
         default:
             break
+        }
+    }
+
+    // MARK: - Portals visuals
+
+    /// Render 1-wide pair-linked teleports (only on the current map's
+    /// side) and the active 2-wide gateway. Each 1-wide portal has a
+    /// subtle swirling animation; the gateway is drawn as a wider
+    /// doorway with corner brackets.
+    private func drawPortals(into ctx: inout GraphicsContext, scale: CGSize) {
+        // 1-wide pairs only appear on the main map for v1.
+        if !state.inSideMap {
+            for (a, b) in state.portalPairs {
+                drawWarpCell(into: &ctx, scale: scale, cell: a.cells[0], variant: 0)
+                drawWarpCell(into: &ctx, scale: scale, cell: b.cells[0], variant: 1)
+            }
+        }
+        // 2-wide gateway — main on the main map, side on the side map.
+        let gw = state.inSideMap ? state.sideGateway : state.mainGateway
+        if let g = gw {
+            drawGateway(into: &ctx, scale: scale, portal: g)
+        }
+    }
+
+    private func drawWarpCell(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        cell: SnakeState.GridPoint, variant: Int
+    ) {
+        let x = cell.x * 8, y = cell.y * 8
+        // Border ring
+        ctx.fillPixel(x: x, y: y, width: 8, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y + 7, width: 8, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + 7, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        // Inner pulse — alternates between shade2 and shade1 every
+        // few frames, offset by variant so paired endpoints pulse
+        // out of phase (visually telegraphing the pairing).
+        let frame = (state.animationTick / 10 + variant) % 2
+        let fill = (frame == 0) ? palette.lcdShade2 : palette.lcdShade1
+        ctx.fillPixel(x: x + 2, y: y + 2, width: 4, height: 4,
+                      color: fill, scale: scale)
+        ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 2,
+                      color: palette.lcdShade3, scale: scale)
+    }
+
+    private func drawGateway(
+        into ctx: inout GraphicsContext, scale: CGSize,
+        portal: SnakeState.Portal
+    ) {
+        let x = portal.x * 8, y = portal.y * 8
+        let w = portal.width * 8
+        // Doorway outline with corner brackets
+        ctx.fillPixel(x: x, y: y, width: w, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y + 7, width: w, height: 1, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + w - 1, y: y, width: 1, height: 8, color: palette.lcdShade3, scale: scale)
+        // Inner swirl — 2-cell wide so it reads as a "wider portal".
+        let frame = (state.animationTick / 8) % 3
+        let innerColor: Color
+        switch frame {
+        case 0:  innerColor = palette.lcdShade2
+        case 1:  innerColor = palette.lcdShade1
+        default: innerColor = palette.lcdShade2
+        }
+        ctx.fillPixel(x: x + 2, y: y + 2, width: w - 4, height: 4,
+                      color: innerColor, scale: scale)
+        // Bracket accents at the corners (top-inner pair)
+        ctx.fillPixel(x: x + 1, y: y + 1, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + w - 2, y: y + 1, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + 1, y: y + 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: x + w - 2, y: y + 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+    }
+
+    private func drawSideMapObstacles(into ctx: inout GraphicsContext, scale: CGSize) {
+        for o in state.sideMapObstacles {
+            let x = o.x * 8, y = o.y * 8
+            ctx.fillPixel(x: x + 1, y: y + 1, width: 6, height: 6,
+                          color: palette.lcdShade3, scale: scale)
+            // Rivet pixels for "industrial" read
+            ctx.fillPixel(x: x + 2, y: y + 2, width: 1, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: x + 5, y: y + 5, width: 1, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+        }
+    }
+
+    /// Treasure sprite + multiplier label. Sprite shape varies by
+    /// tier: small pellet for x2 → animated chest for x50.
+    private func drawSideMapTreasure(into ctx: inout GraphicsContext, scale: CGSize) {
+        guard let t = state.sideMapTreasure else { return }
+        let x = t.x * 8, y = t.y * 8
+        let kind = state.sideMapTreasureKind
+        let twinkle = (state.animationTick / 6) % 3
+
+        switch kind {
+        case .x2:
+            ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+        case .x5:
+            ctx.fillPixel(x: x + 2, y: y + 3, width: 4, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+            if twinkle != 2 {
+                ctx.fillPixel(x: x + 1, y: y + 2, width: 1, height: 1,
+                              color: palette.lcdShade2, scale: scale)
+            }
+        case .x10:
+            // Star: + shape
+            ctx.fillPixel(x: x + 3, y: y + 1, width: 2, height: 6,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 3, width: 6, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 2,
+                          color: palette.lcdShade1, scale: scale)
+        case .x20:
+            // Diamond
+            ctx.fillPixel(x: x + 3, y: y,     width: 2, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 1, width: 4, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 2, width: 6, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x,     y: y + 3, width: 8, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 1, y: y + 4, width: 6, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 4, height: 1, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 3, y: y + 6, width: 2, height: 1, color: palette.lcdShade3, scale: scale)
+            // Inner sparkle
+            if twinkle == 0 {
+                ctx.fillPixel(x: x + 3, y: y + 3, width: 2, height: 1, color: palette.lcdShade1, scale: scale)
+            }
+        case .x50:
+            // Crown — bigger sprite with animated sparkle dots
+            ctx.fillPixel(x: x,     y: y + 5, width: 8, height: 2, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x,     y: y + 2, width: 1, height: 3, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 3, y: y + 1, width: 2, height: 4, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 7, y: y + 2, width: 1, height: 3, color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: x + 2, y: y + 5, width: 4, height: 1, color: palette.lcdShade1, scale: scale)
+            // Sparkle dots around the crown
+            if twinkle != 1 {
+                ctx.fillPixel(x: x - 2, y: y, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: x + 9, y: y + 1, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            }
+            if twinkle == 2 {
+                ctx.fillPixel(x: x + 4, y: y - 2, width: 1, height: 1, color: palette.lcdShade3, scale: scale)
+            }
+        }
+
+        // Multiplier label, drawn just to the right of the sprite.
+        // Anchored leading so it can extend off the cell boundary
+        // without clipping the sprite itself.
+        let labelX = (t.x + 1) * 8 + 1
+        let labelY = t.y * 8 + 4
+        ctx.draw(
+            Text(kind.label)
+                .font(.system(size: 8 * scale.height,
+                              weight: .black,
+                              design: .monospaced))
+                .foregroundColor(palette.lcdShade3),
+            at: CGPoint(x: CGFloat(labelX) * scale.width,
+                        y: CGFloat(labelY) * scale.height),
+            anchor: .leading
+        )
+    }
+
+    /// Pulsing pixel on top of the snake's head + subtle sparkles
+    /// trailing behind, so the player can see they're carrying.
+    private func drawCarryIndicator(into ctx: inout GraphicsContext, scale: CGSize) {
+        guard let head = state.snake.first else { return }
+        let hx = head.x * 8, hy = head.y * 8
+        // Pulsing pixel — 2x2 when "lit", 1x1 when dim, on a 4-frame cycle
+        let pulse = (state.animationTick / 8) % 2
+        if pulse == 0 {
+            ctx.fillPixel(x: hx + 2, y: hy - 1, width: 4, height: 2,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: hx + 3, y: hy - 2, width: 2, height: 1,
+                          color: palette.lcdShade2, scale: scale)
+        } else {
+            ctx.fillPixel(x: hx + 3, y: hy - 1, width: 2, height: 1,
+                          color: palette.lcdShade3, scale: scale)
+        }
+        // Subtle sparkles on a couple of body segments behind the head
+        let sparkleFrames = (state.animationTick / 5) % 4
+        for (i, seg) in state.snake.enumerated() where i > 0 && i % 3 == sparkleFrames {
+            let sx = seg.x * 8 + 3, sy = seg.y * 8 + 3
+            ctx.fillPixel(x: sx, y: sy, width: 1, height: 1,
+                          color: palette.lcdShade3, scale: scale)
         }
     }
 

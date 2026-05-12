@@ -406,8 +406,15 @@ public final class LanderState {
             let rightWobble = sin(yd * 0.058 + phaseRightA) * 5
                             + sin(yd * 0.135 + phaseRightB) * 3
 
-            left.append(  Int((center - halfWidth + leftWobble).rounded()) )
-            right.append( Int((center + halfWidth + rightWobble).rounded()) )
+            // Clamp to screen bounds so a random phase that pushes
+            // the centerline far enough doesn't put a wall off-screen
+            // (test invariant: 0 ≤ left < right ≤ lcdWidth).
+            // Passage width is preserved at minimum because the
+            // wobble amplitudes don't depend on centerDrift.
+            let leftPx  = Int((center - halfWidth + leftWobble).rounded())
+            let rightPx = Int((center + halfWidth + rightWobble).rounded())
+            left.append(max(0, leftPx))
+            right.append(min(Self.lcdWidth, rightPx))
         }
         caveLeftWall  = left
         caveRightWall = right
