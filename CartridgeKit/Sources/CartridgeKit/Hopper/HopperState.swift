@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ConsoleKit
 
 /// Game state for the Hopper cartridge — the legally-distinct-but-
 /// spiritually-Frogger road & river crossing game. Pure model, no
@@ -166,6 +167,19 @@ public final class HopperState {
     public private(set) var timeRemainingTicks: Int = 0
     public private(set) var lastDeath: DeathCause? = nil
 
+    /// Whether the just-ended run set a new per-mode best — drives
+    /// the "NEW BEST!" flag on the result banner.
+    public private(set) var isNewBest: Bool = false
+
+    /// Cartridge identifier used as the `CartridgeScores` key.
+    public static let cartridgeId = "hopper"
+
+    /// All-time best score for `mode` from the shared persistence
+    /// store. Zero on fresh install.
+    public func bestScore(for mode: Mode) -> Int {
+        CartridgeScores.best(cartridge: Self.cartridgeId, mode: mode.rawValue)
+    }
+
     /// Highest row reached (lowest Y value) during the current life —
     /// used by Endless mode scoring; harmless in Classic.
     public private(set) var bestRow: Int = 0
@@ -300,6 +314,7 @@ public final class HopperState {
         }
         score = 0
         lastDeath = nil
+        isNewBest = false
         bestRow = Self.startRow
         respawnFrog()
         phase = .playing
@@ -340,6 +355,7 @@ public final class HopperState {
         score = 0
         timeRemainingTicks = 0
         lastDeath = nil
+        isNewBest = false
         bestRow = 0
         cameraRow = 0
         endlessTopRow = 0
@@ -881,11 +897,20 @@ public final class HopperState {
         }
     }
 
+    /// Persist `score` as the new per-mode best if it exceeds the
+    /// stored value, and set `isNewBest` for the result banner.
+    private func recordCurrentScore() {
+        isNewBest = CartridgeScores.recordIfBetter(
+            score, cartridge: Self.cartridgeId, mode: mode.rawValue
+        )
+    }
+
     private func die(_ cause: DeathCause) {
         lastDeath = cause
         lives -= 1
         if lives <= 0 {
             phase = .dead
+            recordCurrentScore()
         } else {
             // Brief penalty: knock 50 points off (down to zero floor)
             // and respawn at the start sidewalk.
@@ -899,5 +924,6 @@ public final class HopperState {
         let livesBonus = max(0, lives - 1) * 100   // reward unused lives
         score += 500 + timeBonus + livesBonus
         phase = .won
+        recordCurrentScore()
     }
 }

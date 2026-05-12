@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import ConsoleKit
 
 /// Game state for the Lander cartridge. Pure model — no SwiftUI
 /// types — so it's straightforward to unit-test.
@@ -143,6 +144,19 @@ public final class LanderState {
     public private(set) var score: Int = 0
     public private(set) var landingImpact: Double = 0      // |vy| at touchdown
 
+    /// Whether the just-ended run set a new per-mode best — surfaced
+    /// on the result banner as "NEW BEST!".
+    public private(set) var isNewBest: Bool = false
+
+    /// Cartridge identifier used as the `CartridgeScores` key.
+    public static let cartridgeId = "lander"
+
+    /// All-time best score for `mode` from the shared persistence
+    /// store. Zero on fresh install.
+    public func bestScore(for mode: Mode) -> Int {
+        CartridgeScores.best(cartridge: Self.cartridgeId, mode: mode.rawValue)
+    }
+
     // MARK: - Tunables
 
     /// Tuning constants live as instance properties (private) so different
@@ -285,6 +299,7 @@ public final class LanderState {
         fuel = 100
         score = 0
         landingImpact = 0
+        isNewBest = false
         thrustingMain = false
         thrustingLateral = 0
         // Pendulum: cargo hangs at rest directly below the ship.
@@ -410,6 +425,7 @@ public final class LanderState {
         fuel = 100
         score = 0
         landingImpact = 0
+        isNewBest = false
         thrustingMain = false
         thrustingLateral = 0
     }
@@ -550,6 +566,7 @@ public final class LanderState {
             vy = 0
             score = 1000 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 800))
             phase = .landed
+            recordCurrentScore()
         } else {
             crash(impact: abs(vy))
         }
@@ -636,6 +653,7 @@ public final class LanderState {
             // Pendulum landing is harder than classic — reward it more.
             score = 1500 + Int(fuel * 10) + max(0, Int((landMaxVY - landingImpact) * 1000))
             phase = .landed
+            recordCurrentScore()
         } else {
             crash(impact: abs(cvy))
         }
@@ -664,6 +682,7 @@ public final class LanderState {
             landingImpact = 0
             score = scoreForMailRunPartial()
             phase = .crashed
+            recordCurrentScore()
             return
         }
 
@@ -687,6 +706,7 @@ public final class LanderState {
             landingImpact = abs(vy)
             score = scoreForMailRunPartial()
             phase = .crashed
+            recordCurrentScore()
         }
     }
 
@@ -701,6 +721,7 @@ public final class LanderState {
             landingImpact = abs(vy)
             score = scoreForMailRunPartial()
             phase = .crashed
+            recordCurrentScore()
             return
         }
         // Soft landing — clear this pad.
@@ -715,6 +736,7 @@ public final class LanderState {
             landingImpact = abs(vy)
             score = scoreForMailRunWin()
             phase = .landed
+            recordCurrentScore()
         } else {
             // Advance to the next pad. Lift the ship just clear of
             // the pad surface so we don't immediately re-collide,
@@ -841,6 +863,7 @@ public final class LanderState {
             score = 1800 + depthBonus + Int(fuel * 10)
                   + max(0, Int((landMaxVY - landingImpact) * 800))
             phase = .landed
+            recordCurrentScore()
         } else {
             crash(impact: abs(vy))
         }
@@ -854,5 +877,15 @@ public final class LanderState {
         vy = 0
         thetaDot = 0
         phase = .crashed
+        recordCurrentScore()
+    }
+
+    /// Persist `score` as the new per-mode best if it exceeds the
+    /// stored value, and set `isNewBest` for the result banner to
+    /// surface. Called from every .landed / .crashed transition.
+    private func recordCurrentScore() {
+        isNewBest = CartridgeScores.recordIfBetter(
+            score, cartridge: Self.cartridgeId, mode: mode.rawValue
+        )
     }
 }

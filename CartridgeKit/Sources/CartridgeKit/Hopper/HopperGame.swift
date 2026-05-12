@@ -152,13 +152,13 @@ public struct HopperGame: View {
         case .won:
             renderScene(into: &ctx, scale: scale)
             renderBanner(into: &ctx, scale: scale,
-                         title: "SAFE!",
+                         title: state.isNewBest ? "NEW BEST!" : "SAFE!",
                          subtitle: "SCORE \(state.score)",
                          hint: "A: RETRY  START: MENU")
         case .dead:
             renderScene(into: &ctx, scale: scale)
             renderBanner(into: &ctx, scale: scale,
-                         title: "GAME OVER",
+                         title: state.isNewBest ? "NEW BEST!" : "GAME OVER",
                          subtitle: deathSubtitle(),
                          hint: "A: RETRY  START: MENU")
         }
@@ -259,7 +259,11 @@ public struct HopperGame: View {
             )
         }
 
-        let briefing = modes[state.modeSelectCursor].briefing
+        // Briefing strip — left: mission briefing, right: persisted
+        // BEST score for the highlighted mode (hidden when zero so
+        // first-time players don't see "BEST 0").
+        let highlightedMode = modes[state.modeSelectCursor]
+        let briefing = highlightedMode.briefing
         ctx.fillPixel(x: 0, y: 128, width: w, height: 16,
                       color: palette.lcdShade1, scale: scale)
         ctx.draw(
@@ -268,9 +272,21 @@ public struct HopperGame: View {
                               weight: .semibold,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade3),
-            at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 136 * scale.height),
-            anchor: .center
+            at: CGPoint(x: 6 * scale.width, y: 136 * scale.height),
+            anchor: .leading
         )
+        let best = state.bestScore(for: highlightedMode)
+        if best > 0 {
+            ctx.draw(
+                Text("BEST \(best)")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: CGFloat(w - 6) * scale.width, y: 136 * scale.height),
+                anchor: .trailing
+            )
+        }
     }
 
     // MARK: - Play scene

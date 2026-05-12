@@ -143,13 +143,13 @@ public struct LanderGame: View {
         case .landed:
             renderActiveScene(into: &ctx, scale: scale)
             renderResultBanner(into: &ctx, scale: scale,
-                               title: "TOUCHDOWN",
+                               title: state.isNewBest ? "NEW BEST!" : "TOUCHDOWN",
                                subtitle: "SCORE \(state.score)",
                                hint: "A: RETRY  START: MENU")
         case .crashed:
             renderActiveScene(into: &ctx, scale: scale)
             renderResultBanner(into: &ctx, scale: scale,
-                               title: "CRASHED",
+                               title: state.isNewBest ? "NEW BEST!" : "CRASHED",
                                subtitle: String(format: "IMPACT %.2f", state.landingImpact),
                                hint: "A: RETRY  START: MENU")
         }
@@ -262,8 +262,11 @@ public struct LanderGame: View {
             )
         }
 
-        // Briefing strip
-        let briefing = modes[state.modeSelectCursor].briefing
+        // Briefing strip — left: mission briefing, right: persisted
+        // BEST score for the highlighted mode (hidden when zero so
+        // first-time players don't see "BEST 0").
+        let highlightedMode = modes[state.modeSelectCursor]
+        let briefing = highlightedMode.briefing
         ctx.fillPixel(x: 0, y: 128, width: LanderState.lcdWidth, height: 16,
                       color: palette.lcdShade1, scale: scale)
         ctx.draw(
@@ -272,9 +275,21 @@ public struct LanderGame: View {
                               weight: .semibold,
                               design: .monospaced))
                 .foregroundColor(palette.lcdShade3),
-            at: CGPoint(x: 128 * scale.width, y: 136 * scale.height),
-            anchor: .center
+            at: CGPoint(x: 6 * scale.width, y: 136 * scale.height),
+            anchor: .leading
         )
+        let best = state.bestScore(for: highlightedMode)
+        if best > 0 {
+            ctx.draw(
+                Text("BEST \(best)")
+                    .font(.system(size: 9 * scale.height,
+                                  weight: .heavy,
+                                  design: .monospaced))
+                    .foregroundColor(palette.lcdShade3),
+                at: CGPoint(x: 250 * scale.width, y: 136 * scale.height),
+                anchor: .trailing
+            )
+        }
     }
 
     // MARK: - Play scene
