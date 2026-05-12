@@ -43,6 +43,13 @@ public final class HopperState {
     /// Initial timer per Classic crossing (seconds × 60Hz ticks).
     public static let classicTimeTicks: Int = 30 * 60
 
+    /// Initial timer for Heist mode — slower than Classic since
+    /// stealth demands patience.
+    public static let heistTimeTicks: Int = 60 * 60
+
+    /// Cells a guard's vision cone extends in front of them.
+    public static let heistConeLength: Int = 4
+
     // MARK: - Types
 
     /// Which mode the player is currently inside.
@@ -50,13 +57,14 @@ public final class HopperState {
         case classic
         case endless
         case nightShift
-        // case heist — coming in later iterations.
+        case heist
 
         public var displayName: String {
             switch self {
             case .classic:    return "CLASSIC"
             case .endless:    return "ENDLESS"
             case .nightShift: return "NIGHT SHIFT"
+            case .heist:      return "HEIST"
             }
         }
 
@@ -65,6 +73,7 @@ public final class HopperState {
             case .classic:    return "ROAD. RIVER. REACH THE TOP."
             case .endless:    return "CLIMB FOREVER. DON'T FALL BEHIND."
             case .nightShift: return "DAY THEN DARK. WATCH THE HEADLIGHTS."
+            case .heist:      return "SNEAK PAST GUARDS. DODGE THEIR EYES."
             }
         }
     }
@@ -88,6 +97,7 @@ public final class HopperState {
         case road    // touching an entity = die
         case river   // entity = log (ride it); empty water = drown
         case safe    // no entities; safe grass strip (used in Endless)
+        case patrol  // entity = guard (bouncing); standing in vision cone = caught
     }
 
     public enum LaneDirection: Sendable { case left, right }
@@ -105,9 +115,13 @@ public final class HopperState {
         public let visualVariant: Int
     }
 
-    /// A single car or log in continuous cell-space.
+    /// A single car / log / guard in continuous cell-space. `facing`
+    /// only matters for patrol guards (it drives the vision cone
+    /// direction and bouncing-at-edges behavior); other lane kinds
+    /// ignore it.
     public struct Entity: Sendable {
         public var x: Double                  // cell x; can be off-screen for wrap
+        public var facing: LaneDirection = .right
     }
 
     /// Reason the frog died this life. Surfaced to the result banner.
@@ -115,8 +129,9 @@ public final class HopperState {
         case crushed       // hit by a car
         case drowned       // in river, not on a log
         case carriedOff    // log rode the frog off the screen
-        case timeUp        // Classic crossing clock hit zero
+        case timeUp        // Classic / Heist crossing clock hit zero
         case fellBehind    // Endless: scrolled off the screen's bottom
+        case spotted       // Heist: caught in a guard's vision cone
     }
 
     // MARK: - State
@@ -276,6 +291,12 @@ public final class HopperState {
             // "ROWS X" rather than "TIME XX" while in this mode.
             lives = 1
             timeRemainingTicks = 0
+        case .heist:
+            // Heist: same 3 lives as Classic but a longer timer
+            // because stealth play is slower (waiting for vision
+            // cones to pass takes time).
+            lives = Self.classicLives
+            timeRemainingTicks = Self.heistTimeTicks
         }
         score = 0
         lastDeath = nil
@@ -351,6 +372,41 @@ public final class HopperState {
                     Entity(x: Double(i) * spacing)
                 }
             }
+        case .heist:
+            // Heist: four patrol corridors with safe-floor gaps
+            // between them. Guards walk back-and-forth (bouncing at
+            // lane edges) and project a vision cone in front of them
+            // that the frog must avoid. Layout tuned so the player
+            // has rhythmic timing windows but isn't trivial.
+            //
+            //   row 3   patrol — slow, 2 guards, long vision
+            //   row 4   safe floor
+            //   row 5   patrol — medium, 3 guards
+            //   row 6   safe floor
+            //   row 7   patrol — fast, 2 guards
+            //   row 8   safe floor
+            //   row 9   patrol — slow, 2 guards
+            //   rows 10-17 lobby/start area
+            lanes = [
+                Lane(row: 3, kind: .patrol, direction: .right, speed: 0.04,
+                     entityWidth: 1, entityCount: 2, visualVariant: 0),
+                Lane(row: 5, kind: .patrol, direction: .left,  speed: 0.07,
+                     entityWidth: 1, entityCount: 3, visualVariant: 1),
+                Lane(row: 7, kind: .patrol, direction: .right, speed: 0.10,
+                     entityWidth: 1, entityCount: 2, visualVariant: 0),
+                Lane(row: 9, kind: .patrol, direction: .left,  speed: 0.05,
+                     entityWidth: 1, entityCount: 2, visualVariant: 1),
+            ]
+            // Spawn guards evenly along each lane, all initially facing
+            // the lane's direction. They'll bounce at edges each tick.
+            entities = lanes.map { lane in
+                let spacing = Double(Self.cols) / Double(lane.entityCount + 1)
+                return (0..<lane.entityCount).map { i in
+                    Entity(x: spacing * Double(i + 1),
+                           facing: lane.direction)
+                }
+            }
+
         case .endless:
             // Endless: every world row gets a Lane entry (rendered as
             // its own terrain strip). Pre-fill the initial viewport
@@ -430,7 +486,10 @@ public final class HopperState {
 
     private func makeEndlessLane(row: Int, kind: LaneKind) -> Lane {
         switch kind {
-        case .safe:
+        case .safe, .patrol:
+            // .patrol is never picked by `pickEndlessLaneKind` —
+            // listing it here keeps the switch exhaustive and falls
+            // back to a safe lane if someone ever wires it in.
             return Lane(row: row, kind: .safe,
                         direction: .left, speed: 0,
                         entityWidth: 0, entityCount: 0,
@@ -511,7 +570,7 @@ public final class HopperState {
         // - Endless: no upward clamp — keep climbing into procgen.
         let newY: Int = {
             switch mode {
-            case .classic, .nightShift:
+            case .classic, .nightShift, .heist:
                 return max(Self.goalRow, min(Self.rows - 1, frogY + dy))
             case .endless:
                 // Always extend procgen ahead before we let the frog
@@ -535,10 +594,16 @@ public final class HopperState {
         ridingLane = nil
         ridingEntity = nil
 
-        // Classic + Night Shift: reaching the goal row immediately
-        // wins. Endless has no win condition — keep climbing.
+        // Classic / Night Shift / Heist: reaching the goal row
+        // immediately wins. Endless has no win condition — keep climbing.
         if mode != .endless && frogY <= Self.goalRow {
             win()
+            return
+        }
+        // Heist: hopping INTO a vision cone is just as fatal as standing
+        // in one — check before falling through to lane collision.
+        if mode == .heist && isFrogSpotted() {
+            die(.spotted)
             return
         }
         // Check collisions at the new cell (a hop INTO a hazard kills).
@@ -553,6 +618,7 @@ public final class HopperState {
         case .classic:    classicTick()
         case .endless:    endlessTick()
         case .nightShift: nightShiftTick()
+        case .heist:      heistTick()
         }
     }
 
@@ -670,6 +736,71 @@ public final class HopperState {
         resolveFrogVsLanes(isHopping: false)
     }
 
+    // MARK: - Heist mode tick
+
+    /// Heist: guards walk back-and-forth along their patrol lanes
+    /// (bouncing off the edges) and project a vision cone in front
+    /// of them. Frog standing in any cone — or on a guard's tile — is
+    /// caught (.spotted). 60-second timer; Classic 3-lives respawn.
+    private func heistTick() {
+        // Crossing clock.
+        if timeRemainingTicks > 0 {
+            timeRemainingTicks -= 1
+        }
+        if timeRemainingTicks <= 0 {
+            die(.timeUp)
+            return
+        }
+
+        // Advance guards: each entity steps in its own facing direction
+        // (not the lane.direction) so guards can bounce independently.
+        // Lane edges flip the facing flag and clamp position.
+        for li in lanes.indices where lanes[li].kind == .patrol {
+            let lane = lanes[li]
+            for ei in entities[li].indices {
+                let dir = (entities[li][ei].facing == .right) ? 1.0 : -1.0
+                entities[li][ei].x += dir * lane.speed
+                let leftEdge: Double  = 0
+                let rightEdge: Double = Double(Self.cols - 1)
+                if entities[li][ei].x <= leftEdge {
+                    entities[li][ei].x = leftEdge
+                    entities[li][ei].facing = .right
+                } else if entities[li][ei].x >= rightEdge {
+                    entities[li][ei].x = rightEdge
+                    entities[li][ei].facing = .left
+                }
+            }
+        }
+
+        // Vision check: is the frog inside any guard's cone?
+        if isFrogSpotted() {
+            die(.spotted)
+            return
+        }
+    }
+
+    /// Returns true if the frog is currently in any patrol guard's
+    /// vision cone — or standing on a guard's tile (point-blank).
+    /// Vision cone: heistConeLength cells in the guard's facing
+    /// direction, on the guard's lane row only.
+    public func isFrogSpotted() -> Bool {
+        guard mode == .heist else { return false }
+        let fX = frogX, fY = frogY
+        for (li, lane) in lanes.enumerated() where lane.kind == .patrol {
+            if fY != lane.row { continue }
+            for entity in entities[li] {
+                let gx = Int(entity.x.rounded())
+                if gx == fX { return true }
+                if entity.facing == .right {
+                    if fX > gx && fX - gx <= Self.heistConeLength { return true }
+                } else {
+                    if gx > fX && gx - fX <= Self.heistConeLength { return true }
+                }
+            }
+        }
+        return false
+    }
+
     // MARK: - Internals
 
     private func advanceEntities(speedMultiplier: Double = 1.0) {
@@ -736,6 +867,12 @@ public final class HopperState {
         case .safe:
             // No hazards on a safe lane; just snap pixel-X back to the
             // cell grid so we don't carry over log-ride drift.
+            ridingLane = nil
+            ridingEntity = nil
+            frogPixelX = Double(frogX)
+        case .patrol:
+            // Vision-cone spotting is handled by `heistTick` /
+            // `isFrogSpotted`; this helper just doesn't ride patrols.
             ridingLane = nil
             ridingEntity = nil
             frogPixelX = Double(frogX)
