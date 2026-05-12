@@ -2,14 +2,16 @@ import SwiftUI
 import GameBoyKit
 import ConsoleKit
 
-/// Phase-1 QUESTKID — a small top-down Zelda-like adventure across
-/// four connected rooms. Sword combat, wandering enemies, hearts HUD,
-/// game-over → retry. Controls:
+/// QUESTKID — a small top-down Zelda-like adventure. Hub-style
+/// dungeon select on a heart-shaped map: a tutorial dungeon at the
+/// center plus six letter-shape dungeons spelling S-H-E-L-B-Y.
+/// Sword combat, wandering enemies, hearts HUD, per-dungeon clear
+/// records, themed visuals per dungeon. Controls:
 ///
 /// - D-pad: walk in 4 directions
 /// - A:     swing sword
-/// - B:     (reserved for items in Phase 2)
-/// - START: (reserved for inventory in Phase 2)
+/// - B:     (reserved for items)
+/// - START: pause menu
 /// - MENU:  return to library (handled by CartridgeShelf)
 public struct QuestKidGame: View {
 
@@ -959,7 +961,7 @@ public struct QuestKidGame: View {
             anchor: .center
         )
         ctx.draw(
-            Text("FOUR ROOMS. ONE SWORD.")
+            Text("DANGEROUS TO GO ALONE.")
                 .font(.system(size: 8 * scale.height,
                               weight: .heavy,
                               design: .monospaced))
@@ -1341,11 +1343,20 @@ public struct QuestKidGame: View {
 // MARK: - Cartridge factory
 
 public extension GameBoyCartridge {
-    /// Built-in: QUESTKID — a tiny top-down adventure across 4 rooms.
+    /// Built-in: QUESTKID — a small top-down Zelda-like with a
+    /// heart-shaped dungeon-select map and six letter-shape
+    /// dungeons spelling S-H-E-L-B-Y around a central tutorial.
+    ///
+    /// Blurb is a deep-cut callback to the original NES Zelda's
+    /// most famous cryptic hint, "EASTMOST PENNINSULA IS THE SECRET"
+    /// — east/west flipped to match the SHELBY map, with the
+    /// archaic Latin V-for-U spelling of ISTHMUS (a peninsula's
+    /// geographic cousin) standing in for the iconic mistranslation.
+    /// "MV" is hidden inside ISTH-MV-S as a brand wink.
     static let questKid = GameBoyCartridge(
         id: "questkid",
         title: "QUESTKID",
-        blurb: "FOUR ROOMS. ONE SWORD. NO MERCY.",
+        blurb: "WESTMOST ISTHMVS IS THE SECRET.",
         make: { input in QuestKidGame(input: input) }
     )
 }
