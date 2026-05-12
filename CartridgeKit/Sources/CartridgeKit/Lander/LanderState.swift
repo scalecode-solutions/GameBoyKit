@@ -380,9 +380,10 @@ public final class LanderState {
         startRun(mode)
     }
 
-    /// After a result screen, back out to the mode-select grid.
+    /// Back out to the mode-select grid from a result screen or from
+    /// a paused run (B button while paused = "MENU" in the banner).
     public func exitToModeSelect() {
-        guard phase == .landed || phase == .crashed else { return }
+        guard phase == .landed || phase == .crashed || phase == .paused else { return }
         phase = .modeSelect
     }
 

@@ -121,6 +121,23 @@ struct LanderStateTests {
         #expect(phaseBeforeRetry == .crashed || phaseBeforeRetry == .landed)
     }
 
+    @Test func exitToModeSelectFromPausedSucceeds() {
+        let state = LanderState()
+        state.startRun(.classic)
+        state.togglePause()
+        #expect(state.phase == .paused)
+        state.exitToModeSelect()
+        #expect(state.phase == .modeSelect)
+    }
+
+    @Test func exitToModeSelectFromPlayingIsNoOp() {
+        let state = LanderState()
+        state.startRun(.classic)
+        let p0 = state.phase
+        state.exitToModeSelect()
+        #expect(state.phase == p0)
+    }
+
     @Test func exitToModeSelectFromResult() {
         let state = LanderState()
         state.startRun(.classic)

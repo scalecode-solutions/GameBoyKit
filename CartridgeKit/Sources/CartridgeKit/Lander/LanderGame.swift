@@ -40,6 +40,10 @@ public struct LanderGame: View {
             guard powerOn, pressed else { return }
             handleStartPress()
         }
+        .onChange(of: input.bPressed) { _, pressed in
+            guard powerOn, pressed else { return }
+            handleBPress()
+        }
         .onChange(of: input.dpad) { _, dir in
             guard powerOn, state.phase == .modeSelect, let dir else { return }
             if dir.isUp        { state.moveModeSelectCursor(-1) }
@@ -82,6 +86,13 @@ public struct LanderGame: View {
         case .title, .modeSelect:
             break
         }
+    }
+
+    /// B button — escape hatch from a paused run back to the
+    /// mode-select grid. Banner advertises this as "B: MENU".
+    private func handleBPress() {
+        guard state.phase == .paused else { return }
+        state.exitToModeSelect()
     }
 
     // MARK: - Tick loop (60Hz physics)
@@ -128,7 +139,7 @@ public struct LanderGame: View {
             renderActiveScene(into: &ctx, scale: scale)
             renderCenteredBanner(into: &ctx, scale: scale,
                                  title: "PAUSED",
-                                 subtitle: "A: RESUME")
+                                 subtitle: "A: RESUME  B: MENU")
         case .landed:
             renderActiveScene(into: &ctx, scale: scale)
             renderResultBanner(into: &ctx, scale: scale,
