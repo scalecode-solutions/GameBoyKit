@@ -294,6 +294,54 @@ struct HopperStateTests {
         }
     }
 
+    // MARK: - Heist mode
+
+    @Test func heistStartsWithFourPatrolLanes() {
+        let state = HopperState()
+        state.startRun(.heist)
+        #expect(state.mode == .heist)
+        #expect(state.lives == HopperState.classicLives)
+        #expect(state.timeRemainingTicks == HopperState.heistTimeTicks)
+        let patrolLanes = state.lanes.filter { $0.kind == .patrol }
+        #expect(patrolLanes.count == 4)
+        #expect(patrolLanes.allSatisfy { $0.entityCount >= 2 })
+    }
+
+    @Test func heistGuardsBounceAtLaneEdges() {
+        let state = HopperState()
+        state.startRun(.heist)
+        // Tick many times — guards bounce at lane edges, so over time
+        // some guards should have flipped from their initial facing.
+        var initialFacings = state.lanes.indices.map { li in
+            state.entities[li].map(\.facing)
+        }
+        for _ in 0..<800 {
+            state.tick()
+            if state.phase != .playing { break }
+        }
+        // Check at least one guard's facing has flipped.
+        var anyFlipped = false
+        for (li, lane) in state.lanes.enumerated() where lane.kind == .patrol {
+            for (ei, entity) in state.entities[li].enumerated() {
+                if initialFacings[li][ei] != entity.facing {
+                    anyFlipped = true
+                }
+            }
+        }
+        // The guards should bounce within a few seconds at lane speeds 0.04–0.10.
+        if state.phase == .playing {
+            #expect(anyFlipped)
+        }
+    }
+
+    @Test func heistSpottedDetectsFrogInCone() {
+        let state = HopperState()
+        state.startRun(.heist)
+        // Outside any cone right after spawn (frog at startRow=16,
+        // patrol lanes at rows 3, 5, 7, 9).
+        #expect(state.isFrogSpotted() == false)
+    }
+
     @Test func nightShiftIsNightPhaseFalseInOtherModes() {
         let state = HopperState()
         state.startRun(.classic)

@@ -160,6 +160,7 @@ public struct HopperGame: View {
         case .carriedOff: return "SWEPT AWAY"
         case .timeUp:     return "TIME'S UP"
         case .fellBehind: return "LEFT BEHIND"
+        case .spotted:    return "SPOTTED"
         case .none:       return "SCORE \(state.score)"
         }
     }
@@ -281,6 +282,11 @@ public struct HopperGame: View {
             drawEndlessBackground(into: &ctx, scale: scale, camY: camY)
             drawLanes(into: &ctx, scale: scale, camY: camY)
             drawFrog(into: &ctx, scale: scale, camY: camY)
+        case .heist:
+            // Museum-floor backdrop with marked patrol corridors.
+            drawHeistBackground(into: &ctx, scale: scale)
+            drawHeistGuardsAndCones(into: &ctx, scale: scale)
+            drawFrog(into: &ctx, scale: scale, camY: 0)
         case .nightShift:
             // Night Shift uses Classic's layout. Paint the scene
             // normally first, then layer a darkness mask + headlight
@@ -375,6 +381,107 @@ public struct HopperGame: View {
                 ctx.fillPixel(x: col * cs + 3, y: row * cs + 3,
                               width: 2, height: 2,
                               color: palette.lcdShade1, scale: scale)
+            }
+        }
+    }
+
+    /// Heist mode backdrop — museum floor with a marked vault exit
+    /// at the top, distinct stripes on patrol-corridor rows, and a
+    /// lobby pattern at the bottom (the start area).
+    private func drawHeistBackground(into ctx: inout GraphicsContext, scale: CGSize) {
+        let cs = HopperState.cellSize
+        let totalW = HopperState.cols * cs
+        let totalH = HopperState.rows * cs
+        let hudH   = HopperState.hudRows * cs
+
+        // Floor base — shade2 (lighter than tarmac, distinct from grass).
+        ctx.fillPixel(x: 0, y: hudH,
+                      width: totalW, height: totalH - hudH,
+                      color: palette.lcdShade2, scale: scale)
+
+        // Vault exit row (top of play area). Solid shade3 strip with
+        // a row of small "treasure" pixels reading as gold bars.
+        let exitY = HopperState.goalRow * cs
+        ctx.fillPixel(x: 0, y: exitY, width: totalW, height: cs,
+                      color: palette.lcdShade3, scale: scale)
+        for col in stride(from: 2, to: HopperState.cols, by: 3) {
+            ctx.fillPixel(x: col * cs + 2, y: exitY + 2,
+                          width: 4, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: col * cs + 2, y: exitY + 4,
+                          width: 4, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+        }
+
+        // Patrol corridors — each lane's row gets a darker strip
+        // with dashed boundaries top and bottom so it reads as a
+        // marked hallway.
+        for lane in state.lanes where lane.kind == .patrol {
+            let y = lane.row * cs
+            ctx.fillPixel(x: 0, y: y, width: totalW, height: cs,
+                          color: palette.lcdShade1, scale: scale)
+            for col in stride(from: 0, to: HopperState.cols, by: 2) {
+                ctx.fillPixel(x: col * cs, y: y,
+                              width: cs / 2, height: 1,
+                              color: palette.lcdShade3, scale: scale)
+                ctx.fillPixel(x: col * cs, y: y + cs - 1,
+                              width: cs / 2, height: 1,
+                              color: palette.lcdShade3, scale: scale)
+            }
+        }
+
+        // Lobby (start area, last 5 rows) — checkerboard tile pattern.
+        let lobbyStart = (HopperState.rows - 5) * cs
+        for row in (HopperState.rows - 5)..<HopperState.rows {
+            for col in 0..<HopperState.cols where (col + row) % 2 == 0 {
+                ctx.fillPixel(x: col * cs + 3, y: row * cs + 3,
+                              width: 2, height: 2,
+                              color: palette.lcdShade1, scale: scale)
+            }
+        }
+        _ = lobbyStart
+    }
+
+    /// Heist: draw each guard sprite + their vision cone extending in
+    /// front of them. Cones drawn before guards so the guard sprite
+    /// sits on top of the cone-base pixel.
+    private func drawHeistGuardsAndCones(into ctx: inout GraphicsContext, scale: CGSize) {
+        let cs = HopperState.cellSize
+        let coneLen = HopperState.heistConeLength
+        for (li, lane) in state.lanes.enumerated() where lane.kind == .patrol {
+            let y = lane.row * cs
+            for entity in state.entities[li] {
+                let gx = Int(entity.x.rounded())
+                let px = gx * cs
+
+                // Vision cone — coneLen cells of shade2 with a deeper
+                // sliver of shade3 closer to the guard, so the cone
+                // reads as "intensity falls off with distance".
+                for d in 1...coneLen {
+                    let cellOffsetX: Int
+                    switch entity.facing {
+                    case .right: cellOffsetX = (gx + d) * cs
+                    case .left:  cellOffsetX = (gx - d) * cs
+                    }
+                    if cellOffsetX < 0 || cellOffsetX >= HopperState.cols * cs { continue }
+                    let shade = (d <= 2) ? palette.lcdShade3 : palette.lcdShade2
+                    ctx.fillPixel(x: cellOffsetX, y: y + 2,
+                                  width: cs, height: cs - 4,
+                                  color: shade.opacity(0.55),
+                                  scale: scale)
+                }
+
+                // Guard sprite: 1 cell. Head + body + base shadow.
+                // The "head" pixel pokes up to give a humanoid silhouette
+                // that reads as different from a car or log.
+                ctx.fillPixel(x: px + 2, y: y, width: 4, height: 2,
+                              color: palette.lcdShade3, scale: scale)        // head/hat
+                ctx.fillPixel(x: px + 1, y: y + 2, width: 6, height: 4,
+                              color: palette.lcdShade3, scale: scale)        // body
+                ctx.fillPixel(x: px + 2, y: y + 3, width: 4, height: 1,
+                              color: palette.lcdShade1, scale: scale)        // belt
+                ctx.fillPixel(x: px + 1, y: y + 6, width: 6, height: 1,
+                              color: palette.lcdShade3, scale: scale)        // base
             }
         }
     }
@@ -495,6 +602,11 @@ public struct HopperGame: View {
         x: Int, y: Int, w: Int, h: Int
     ) {
         switch kind {
+        case .patrol:
+            // Endless mode never generates patrol lanes (those are
+            // Heist-only) — listed here only to keep the switch
+            // exhaustive. Fall through to the safe-grass painter.
+            fallthrough
         case .safe:
             // Grass strip.
             ctx.fillPixel(x: x, y: y, width: w, height: h,
@@ -564,10 +676,11 @@ public struct HopperGame: View {
         x: Int, y: Int, w: Int, h: Int
     ) {
         switch kind {
-        case .safe:
-            // Safe lanes have no entities (entityCount == 0); this
-            // branch is unreachable in practice but keeps the switch
-            // exhaustive.
+        case .safe, .patrol:
+            // Safe lanes have no entities (entityCount == 0). Patrol
+            // lanes draw their guards + vision cones through the
+            // dedicated `drawHeistGuardsAndCones` path. Both branches
+            // are unreachable here but keep the switch exhaustive.
             return
         case .road:
             // Car silhouette — body + windshield strip + a 2px wheels
@@ -659,9 +772,9 @@ public struct HopperGame: View {
             anchor: .center
         )
 
-        // Right-side readout: Classic & Night Shift show TIME, Endless shows ROWS.
+        // Right-side readout: Classic / Night Shift / Heist show TIME, Endless shows ROWS.
         switch state.mode {
-        case .classic, .nightShift:
+        case .classic, .nightShift, .heist:
             let seconds = max(0, state.timeRemainingTicks / 60)
             let lowTime = seconds <= 5
             let color: Color = {
