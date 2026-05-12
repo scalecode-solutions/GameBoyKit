@@ -201,6 +201,11 @@ public struct LanderGame: View {
             anchor: .center
         )
 
+        // Hero lander sprite hovering between the subtitle and the
+        // PRESS A pulse, with a small animated thrust flame so the
+        // title screen has some visual life.
+        drawTitleLander(into: &ctx, scale: scale, cx: 128, cy: 96)
+
         // Press-A pulse
         if (animTick / 30) % 2 == 0 {
             ctx.draw(
@@ -209,9 +214,49 @@ public struct LanderGame: View {
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: 128 * scale.width, y: 116 * scale.height),
+                at: CGPoint(x: 128 * scale.width, y: 130 * scale.height),
                 anchor: .center
             )
+        }
+    }
+
+    /// Small hero lander for the title screen — body + legs + a
+    /// flickering thrust flame underneath.
+    private func drawTitleLander(
+        into ctx: inout GraphicsContext, scale: CGSize, cx: Int, cy: Int
+    ) {
+        // Cone top
+        ctx.fillPixel(x: cx - 1, y: cy - 8, width: 2, height: 2,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx - 2, y: cy - 6, width: 4, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        // Body
+        ctx.fillPixel(x: cx - 4, y: cy - 5, width: 8, height: 8,
+                      color: palette.lcdShade3, scale: scale)
+        // Cockpit
+        ctx.fillPixel(x: cx - 2, y: cy - 2, width: 4, height: 3,
+                      color: palette.lcdShade1, scale: scale)
+        // Legs
+        ctx.fillPixel(x: cx - 6, y: cy + 3, width: 2, height: 4,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx + 4, y: cy + 3, width: 2, height: 4,
+                      color: palette.lcdShade3, scale: scale)
+        // Foot pads
+        ctx.fillPixel(x: cx - 8, y: cy + 6, width: 5, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx + 3, y: cy + 6, width: 5, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+
+        // Animated thrust flame (2-frame on, 2-frame off pattern).
+        let flameFrame = animTick / 6
+        let flameH = (flameFrame % 3 == 2) ? 0 : (flameFrame % 2 == 0 ? 6 : 4)
+        if flameH > 0 {
+            ctx.fillPixel(x: cx - 3, y: cy + 7, width: 6, height: flameH,
+                          color: palette.lcdShade3, scale: scale)
+            ctx.fillPixel(x: cx - 2, y: cy + 7, width: 4, height: flameH + 1,
+                          color: palette.lcdShade2, scale: scale)
+            ctx.fillPixel(x: cx - 1, y: cy + 7, width: 2, height: flameH + 2,
+                          color: palette.lcdShade1, scale: scale)
         }
     }
 

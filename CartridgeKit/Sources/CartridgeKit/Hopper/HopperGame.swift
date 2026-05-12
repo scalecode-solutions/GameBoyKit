@@ -204,6 +204,11 @@ public struct HopperGame: View {
             at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 76 * scale.height),
             anchor: .center
         )
+
+        // Hero frog on a lily pad with little animated water ripples
+        // flanking it — gives the title screen a sense of place.
+        drawTitleFrogOnLily(into: &ctx, scale: scale, cx: w / 2, cy: 100)
+
         if (animTick / 30) % 2 == 0 {
             ctx.draw(
                 Text("PRESS A")
@@ -211,9 +216,49 @@ public struct HopperGame: View {
                                   weight: .heavy,
                                   design: .monospaced))
                     .foregroundColor(palette.lcdShade3),
-                at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 116 * scale.height),
+                at: CGPoint(x: CGFloat(w / 2) * scale.width, y: 130 * scale.height),
                 anchor: .center
             )
+        }
+    }
+
+    /// Hero frog sitting on a lily pad — title-screen decoration with
+    /// animated water ripples scrolling out from each side.
+    private func drawTitleFrogOnLily(
+        into ctx: inout GraphicsContext, scale: CGSize, cx: Int, cy: Int
+    ) {
+        // Lily pad — wide oval-ish strip.
+        ctx.fillPixel(x: cx - 9, y: cy + 1, width: 18, height: 4,
+                      color: palette.lcdShade2, scale: scale)
+        ctx.fillPixel(x: cx - 7, y: cy,     width: 14, height: 1,
+                      color: palette.lcdShade2, scale: scale)
+        ctx.fillPixel(x: cx - 7, y: cy + 5, width: 14, height: 1,
+                      color: palette.lcdShade2, scale: scale)
+        // Lily pad veins (darker accent line).
+        ctx.fillPixel(x: cx - 8, y: cy + 3, width: 16, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+
+        // Frog on top — slightly bigger than the in-game sprite so it
+        // reads at title-screen distance.
+        ctx.fillPixel(x: cx - 4, y: cy - 5, width: 8, height: 5,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx - 3, y: cy - 4, width: 6, height: 3,
+                      color: palette.lcdShade2, scale: scale)
+        // Eyes — two single pixels poking up.
+        ctx.fillPixel(x: cx - 3, y: cy - 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+        ctx.fillPixel(x: cx + 2, y: cy - 6, width: 1, height: 1,
+                      color: palette.lcdShade3, scale: scale)
+
+        // Water ripples scrolling outward on each side. The ripple
+        // offset cycles every 30 ticks for a gentle pulse.
+        let ripple = (animTick / 12) % 4
+        for side in [-1, 1] {
+            let baseX = cx + side * (14 + ripple)
+            ctx.fillPixel(x: baseX, y: cy + 3, width: 2, height: 1,
+                          color: palette.lcdShade1, scale: scale)
+            ctx.fillPixel(x: baseX + side * 4, y: cy + 4, width: 2, height: 1,
+                          color: palette.lcdShade1, scale: scale)
         }
     }
 
